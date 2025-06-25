@@ -119,10 +119,10 @@ npm install hyperswarm multiplex
 ---
 
 ## Notes
-- the warning `[WARN] Socket error: connection reset by peer` is common and often harmless.
-- if you get the warning `[WARN] [CONFLICT] Another host attempted to connect. Ignoring.` you may want to change your bridge ID.
-- the releases are released as executable files.
-- the launcher only works for realeases is bundeled in the zip file with the `nat-tunnel.exe`.
+- The warning `[WARN] Socket error: connection reset by peer` is common and often harmless.
+- If you get the warning `[WARN] [CONFLICT] Another host attempted to connect. Ignoring.` you may want to change your bridge ID.
+- The releases are released as executable files.
+- The launcher only works for realeases is bundeled in the zip file with the `nat-tunnel.exe`.
 
 ---
 
