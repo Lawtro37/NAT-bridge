@@ -144,6 +144,6 @@ Any contributions that help make NAT-bridge more robust, secure, or user-friendl
 
 #### made by Lawtro
 
-##### MIT Licence
+##### GPL-3.0 license
 
 ##
