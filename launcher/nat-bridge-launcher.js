@@ -19,9 +19,14 @@ function prompt(question) {
 
 function findNatBridgeExecutable() {
     const isWin = os.platform() === "win32";
+    if (isWin) {
+        const path = require("path");
+        const exePath = path.resolve(__dirname, "nat-bridge.exe");
+        if (fs.existsSync(exePath)) return exePath;
+    }
     const cmd = isWin ? "where" : "which";
-    const result = spawnSync(cmd, ["nat-bridge"], { encoding: "utf-8" });
-    if (result.status === 0) return result.stdout.trim();
+    const result = spawnSync(cmd, [isWin ? "nat-bridge.exe" : "nat-bridge"], { encoding: "utf-8" });
+    if (result.status === 0 && result.stdout.trim()) return result.stdout.trim();
     return null;
 }
 
