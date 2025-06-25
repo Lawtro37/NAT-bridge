@@ -65,10 +65,10 @@ node main.js client mybridge --listen 1234 --protocol udp
 node main.js host mybridge2 --expose 8081 --protocol tcp
 ```
 
-#### Connect as a client and listen on port 9000 for both TCP and UDP
+#### Connect as a client and listen on port 9000 for both TCP
 
 ```bash
-node main.js client mybridge2 --listen 9000 --protocol both
+node main.js client mybridge2 --listen 9000 --protocol tcp
 ```
 
 ---
