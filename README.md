@@ -120,7 +120,7 @@ npm install hyperswarm multiplex
 
 ## Notes
 - the warning `[WARN] Socket error: connection reset by peer` is common and often harmless.
-- if you get the warning `[WARN] [CONFLICT] Another host attempted to connect. Ignoring.` you may want to change your bridge ID
+- if you get the warning `[WARN] [CONFLICT] Another host attempted to connect. Ignoring.` you may want to change your bridge ID.
 
 ---
 
