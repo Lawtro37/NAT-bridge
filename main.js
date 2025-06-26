@@ -64,23 +64,23 @@ if (!['host', 'client', 'config'].includes(mode) || !bridgeId || !['tcp', 'udp',
 if (mode === 'config') { // Load configuration from file
     info(`Loading configuration from file "${bridgeId}"`);
     // load from config file
-    const config = require(bridgeId);
-    if (['host', 'client'].includes(config.mode) && ['tcp', 'udp', 'both'].includes(config.protocol)) {
-        mode = config.mode;
-        bridgeId = config.bridgeId || Math.random().toString(36).substring(2, 15);
-        listenPort = config.listenPort || listenPort || 5000;
-        remotePort = config.exposedPort || remotePort || 8080;
-        protocol = config.protocol;
-        VERBOSE = config.verbose || VERBOSE;
-        if (mode === 'client' && protocol === 'both') {
-            error("Client mode does not support 'both' protocol. Please use 'tcp' or 'udp'.");
-            info("You can open a udp and tcp tunnel on the same port to achieve the same effect.");
-            process.exit(1);
-        }
-    } else {
-        error("Invalid configuration file. Please check the contents.");
-        process.exit(1);
-    }
+	try {
+    	const config = require(bridgeId);
+		if (['host', 'client'].includes(config.mode) && ['tcp', 'udp', 'both'].includes(config.protocol)) {
+			mode = config.mode;
+			bridgeId = config.bridgeId || Math.random().toString(36).substring(2, 15);
+			listenPort = config.listenPort || listenPort || 5000;
+			remotePort = config.exposedPort || remotePort || 8080;
+			protocol = config.protocol;
+			VERBOSE = config.verbose || VERBOSE;
+		} else {
+			error("Invalid configuration file. Please check the contents.");
+			process.exit(1);
+		}
+	} catch (e) {
+		error(`Failed to load configuration file "${bridgeId}": ${e.message}`);
+		process.exit(1);
+	}
 }
 
 if (mode === 'client' && protocol === 'both') {
