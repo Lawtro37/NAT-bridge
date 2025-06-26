@@ -1,0 +1,6 @@
+{
+    "comment": "configuration example for connecting to an HTTP(S) server running on the host machine",
+    "mode": "client",
+    "listenPort": 80,
+    "protocol": "tcp"
+}

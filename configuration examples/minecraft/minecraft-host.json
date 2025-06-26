@@ -1,0 +1,6 @@
+{
+    "comment": "configuration example for exposing Minecraft server running on the host machine",
+    "mode": "host",
+    "exposedPort": 25565,
+    "protocol": "tcp"
+}

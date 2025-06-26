@@ -1,0 +1,6 @@
+{
+    "comment": "configuration example for exposing HTTP(S) server running on the host machine",
+    "mode": "host",
+    "exposedPort": 80,
+    "protocol": "tcp"
+}
