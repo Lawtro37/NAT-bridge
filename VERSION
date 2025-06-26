@@ -1,4 +1,4 @@
 1.0.1
 - NAT-bridge will now attempt to reconnect if disconnected.
-- Added new version/update notices
-- Added loading from configuration files (examples provided in the "/configuration examples" directory)
+- Added new version/update notices.
+- Added loading from configuration files (examples provided in the "/configuration examples" directory).
