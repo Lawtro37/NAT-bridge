@@ -3,6 +3,33 @@ const dgram = require('dgram');
 const Hyperswarm = require('hyperswarm');
 const crypto = require('crypto');
 const multiplex = require('multiplex');
+const https = require('https');
+const VERSION = '1.0.1';
+const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/nat-bridge/main/VERSION';
+
+
+https.get(VERSION_CHECK_URL, (res) => {
+	let data = '';
+	res.on('data', chunk => data += chunk);
+	res.on('end', () => {
+		const remoteVersion = data.trim()
+		.split("\n----------\n")[0] // future-proofing if I want to add more stuff later
+		.split("\n");
+		if (remoteVersion.length === 0) {
+			warn('Could not retrieve remote version information.');
+			return;
+		}
+		if (remoteVersion && remoteVersion[0] !== VERSION) {
+			console.log(color('[UPDATE]', '33'), `A new version (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
+			console.log(color('[UPDATE]', '33'), 'Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
+			if (remoteVersion.length > 1) {
+				console.log(color('[UPDATE]', '33'), `Changelog: \n ${remoteVersion.slice(1).join('\n')}`);
+			}
+		}
+	});
+}).on('error', () => {
+	warn('Could not check for updates.');
+});
 
 // Helpers
 const args = process.argv.slice(2);
@@ -19,8 +46,8 @@ let protocol = 'tcp';
 let VERBOSE = false;
 
 // Arg parsing
-const mode = args[0];
-const bridgeId = args[1];
+let mode = args[0];
+let bridgeId = args[1];
 
 for (let i = 2; i < args.length; i++) {
 	if (args[i] === '--listen' || (args[i] === '-l' && args[i + 1])) listenPort = parseInt(args[++i]);
@@ -30,8 +57,36 @@ for (let i = 2; i < args.length; i++) {
 	else if (args[i] === '--help' || (args[i] === '-h')) return printHelpAndExit();
 }
 
-if (!['host', 'client'].includes(mode) || !bridgeId || !['tcp', 'udp', 'both'].includes(protocol)) {
+if (!['host', 'client', 'config'].includes(mode) || !bridgeId || !['tcp', 'udp', 'both'].includes(protocol)) {
 	return printHelpAndExit();
+}
+
+if (mode === 'config') { // Load configuration from file
+    info(`Loading configuration from file "${bridgeId}"`);
+    // load from config file
+    const config = require(bridgeId);
+    if (['host', 'client'].includes(config.mode) && ['tcp', 'udp', 'both'].includes(config.protocol)) {
+        mode = config.mode;
+        bridgeId = config.bridgeId || Math.random().toString(36).substring(2, 15);
+        listenPort = config.listenPort || listenPort || 5000;
+        remotePort = config.exposedPort || remotePort || 8080;
+        protocol = config.protocol;
+        VERBOSE = config.verbose || VERBOSE;
+        if (mode === 'client' && protocol === 'both') {
+            error("Client mode does not support 'both' protocol. Please use 'tcp' or 'udp'.");
+            info("You can open a udp and tcp tunnel on the same port to achieve the same effect.");
+            process.exit(1);
+        }
+    } else {
+        error("Invalid configuration file. Please check the contents.");
+        process.exit(1);
+    }
+}
+
+if (mode === 'client' && protocol === 'both') {
+    error("Client mode does not support 'both' protocol. Please use 'tcp' or 'udp'.");
+    info("You can open a udp and tcp tunnel on the same port to achieve the same effect.");
+    process.exit(1);
 }
 
 function printHelpAndExit() {
@@ -41,6 +96,7 @@ v1.0.0
 
 Usage:
   node main.js <host|client> <bridge-id> [options]
+  node main.js config <config-file>
 
 Options:
   -e, --expose <port>       Port to expose on host (default: 8080)
@@ -107,7 +163,7 @@ swarm.on('connection', (socket) => {
 		const stopReading = readLines(socket, (line) => {
 			if (stage === 0) {
 				if (line === "HELLO:host") {
-					warn("[CONFLICT] Another host attempted to connect. Ignoring.");
+					warn("[CONFLICT] Another host attempted to connect. Ignoring. (You may want to change your bridge ID)");
 					stopReading(); socket.destroy();
 				} else if (line === "HELLO:client") {
 					stage = 1;
@@ -301,6 +357,11 @@ swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' });
 swarm.on('error', (err) => {
 	error(`Swarm error: ${err.message}`);
 	process.exit(1);
+});
+
+swarm.on('close', () => {
+  warn("Disconected. Attempting reconnect in 5 seconds...");
+  setTimeout(() => swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' }), 5000);
 });
 
 // close all sockets gracefully
