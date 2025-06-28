@@ -4,7 +4,7 @@ const Hyperswarm = require('hyperswarm');
 const crypto = require('crypto');
 const multiplex = require('multiplex');
 const https = require('https');
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/nat-bridge/main/VERSION';
 
 
@@ -37,7 +37,36 @@ const color = (text, c) => process.stdout.isTTY ? `\x1b[${c}m${text}\x1b[0m` : t
 const info = (msg) => console.log(color('[INFO]', '36'), msg);
 const warn = (msg) => console.warn(color('[WARN]', '33'), msg);
 const error = (msg) => console.error(color('[ERROR]', '31'), msg);
+const sucsess = (msg) => console.log(color('[SUCCESS]', '32'), msg);
 const verboseLog = (...msg) => VERBOSE && console.log(color('[VERBOSE]', '90'), ...msg);
+
+let spinner = false;
+let spinnerIndex = 0;
+const spinnerChars = ['|', '/', '-', '\\'];
+let spinnerInterval;
+let spinnerMessageLength = 0;
+
+const startSpinner = (message) => {
+	if (!process.stdout.isTTY) return;
+	spinner = true;
+	spinnerMessageLength = message.length;
+	process.stdout.write('');
+	if (spinnerInterval) clearInterval(spinnerInterval);
+	spinnerInterval = setInterval(() => {
+		process.stdout.write(`\r${color('[WAIT]', '90')} ${message} ${spinnerChars[spinnerIndex++]}`);
+		spinnerIndex %= spinnerChars.length;
+	}, 200);
+};
+const stopSpinner = () => {
+	if (!spinner) return;
+	spinner = false;
+	if (spinnerInterval) clearInterval(spinnerInterval);
+	process.stdout.write('\r' + ' '.repeat(spinnerMessageLength+10) + '\r');
+};
+
+let tcpServer = null;
+let udpSocket = null;
+const activeStreams = new Set();
 
 // Defaults
 let listenPort = 5000;
@@ -132,6 +161,12 @@ if (mode === 'host' && protocol !== 'udp') {
 	testConn.once('connect', () => testConn.destroy());
 }
 
+if (mode == "client") {
+	startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
+} else {
+	startSpinner(`waiting for P2P connections...`);
+}
+
 // P2P Setup
 const swarm = new Hyperswarm();
 
@@ -151,7 +186,8 @@ function readLines(socket, onLine) {
 }
 
 swarm.on('connection', (socket) => {
-	info('P2P connection established');
+	stopSpinner();
+	sucsess('P2P connection established');
 
 	socket.on('error', (err) => warn(`Socket error: ${err.message}`));
 	socket.on('close', () => verboseLog('P2P socket closed'));
@@ -256,11 +292,12 @@ function setupTCPHost(socket) {
 function setupTCPClient(socket) {
 	const mux = multiplex();
 	socket.pipe(mux).pipe(socket);
-
 	mux.on('error', (err) => warn(`Multiplex error: ${err.message}`));
 
-	const server = net.createServer((local) => {
+	tcpServer = net.createServer((local) => {
 		const stream = mux.createStream();
+		activeStreams.add(stream);
+		stream.on('close', () => activeStreams.delete(stream));
 
 		stream.on('error', (err) => warn(`TCP stream error: ${err.message}`));
 		local.on('error', (err) => warn(`TCP local error: ${err.message}`));
@@ -272,9 +309,8 @@ function setupTCPClient(socket) {
 		verboseLog('TCP connection -> remote tunnel');
 	});
 
-	server.on('error', (err) => error(`TCP server error: ${err.message}`));
-
-	server.listen(listenPort, () => info(`TCP tunnel listening on localhost:${listenPort}`));
+	tcpServer.on('error', (err) => error(`TCP server error: ${err.message}`));
+	tcpServer.listen(listenPort, () => info(`TCP tunnel listening on localhost:${listenPort}`));
 }
 
 // UDP Host
@@ -312,31 +348,32 @@ function setupUDPHost(socket) {
 function setupUDPClient(socket) {
 	const mux = multiplex();
 	socket.pipe(mux).pipe(socket);
-
 	mux.on('error', (err) => warn(`Multiplex error: ${err.message}`));
 
-	const udp = dgram.createSocket('udp4');
+	udpSocket = dgram.createSocket('udp4');
 	const stream = mux.createStream();
+	activeStreams.add(stream);
+	stream.on('close', () => activeStreams.delete(stream));
 
-	udp.bind(listenPort, () => info(`UDP tunnel ready on localhost:${listenPort}`));
+	udpSocket.bind(listenPort, () => info(`UDP tunnel ready on localhost:${listenPort}`));
 
-	udp.on('message', (msg) => {
+	udpSocket.on('message', (msg) => {
 		verboseLog(`[UDP CLIENT] localApp → tunnel (${msg.length} bytes)`, preview(msg));
 		try { stream.write(msg); } catch {}
 	});
 
 	stream.on('data', (chunk) => {
 		verboseLog(`[UDP CLIENT] tunnel → localApp (${chunk.length} bytes)`, preview(chunk));
-		udp.send(chunk, listenPort, '127.0.0.1');
+		udpSocket.send(chunk, listenPort, '127.0.0.1');
 	});
 
 	stream.on('close', () => {
 		verboseLog(`[UDP CLIENT] stream closed`);
-		udp.close();
+		udpSocket.close();
 	});
 
 	stream.on('error', (err) => warn(`UDP stream error: ${err.message}`));
-	udp.on('error', (err) => warn(`UDP socket error: ${err.message}`));
+	udpSocket.on('error', (err) => warn(`UDP socket error: ${err.message}`));
 }
 
 // Utilities
@@ -353,7 +390,7 @@ function preview(buf) {
 	return str.length > 60 ? str.slice(0, 57) + '...' : str;
 }
 
-swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' });
+swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' })
 swarm.on('error', (err) => {
 	error(`Swarm error: ${err.message}`);
 	process.exit(1);
@@ -364,32 +401,48 @@ swarm.on('close', () => {
   setTimeout(() => swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' }), 5000);
 });
 
-// close all sockets gracefully
-process.on('SIGINT', () => {
-	info('Shutting down gracefully...');
+let exiting = false;
+
+// Cleanup
+function gracefulExit(code = 0) {
+	if(!exiting) info('Shutting down gracefully...');
+	exiting = true;
+	stopSpinner();
+
+	if (tcpServer) {
+		tcpServer.close(() => info('TCP server closed'));
+	}
+
+	if (udpSocket) {
+		udpSocket.close(() => info('UDP socket closed'));
+	}
+
+	for (const stream of activeStreams) {
+		try {
+			stream.end();
+			stream.once('finish', () => {
+				if (!stream.destroyed) stream.destroy();
+			});
+			setTimeout(() => {
+				if (!stream.destroyed) stream.destroy();
+			}, 2000);
+		} catch (err) {
+			warn(`Error while closing stream: ${err.message}`);
+		}
+	}
+	activeStreams.clear();
+
 	swarm.destroy(() => {
 		info('Swarm closed');
-		process.exit(0);
+		process.exit(code);
 	});
-});
+}
 
-process.on('SIGTERM', () => {
-	info('Received SIGTERM, shutting down gracefully...');
-	swarm.destroy(() => {
-		info('Swarm closed');
-		process.exit(0);
-	});
-});
-
-process.on('exit', (code) => {
-	info(`Exiting with code ${code}`);
-	swarm.destroy(() => {
-		info('Swarm destroyed');
-	});
-});
-
+process.on('SIGINT', () => gracefulExit(0));
+process.on('SIGTERM', () => gracefulExit(0));
+process.on('exit', (code) => gracefulExit(code));
 process.on('uncaughtException', (err) => {
 	error(`Uncaught exception: ${err.message}`);
 	if (VERBOSE) console.error(err.stack || err);
-	process.exit(1);
+	gracefulExit(1);
 });
