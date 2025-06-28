@@ -1,4 +1,5 @@
-1.0.1
-- NAT-bridge will now attempt to reconnect if disconnected.
-- Added new version/update notices.
-- Added loading from configuration files (examples provided in the "/configuration examples" directory).
+1.0.2
+- fixed a bug were the client just hanged after attempting to exit
+- now more politely closes sockets when exiting 
+- added a cool spinner thingy when locating peers
+- added a success message when connecting to a peer
