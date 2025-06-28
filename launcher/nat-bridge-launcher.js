@@ -13,6 +13,12 @@ const rl = readline.createInterface({
     output: process.stdout,
 });
 
+// Color helpers
+const color = (text, c) => process.stdout.isTTY ? `\x1b[${c}m${text}\x1b[0m` : text;
+const info = (msg) => console.log(color('[INFO]', '36'), msg);
+const warn = (msg) => console.warn(color('[WARN]', '33'), msg);
+const error = (msg) => console.error(color('[ERROR]', '31'), msg);
+
 function prompt(question) {
     return new Promise((res) => rl.question(question, res));
 }
@@ -35,61 +41,147 @@ function generateRandomID() {
 }
 
 (async () => {
-    let exe = findNatBridgeExecutable();
+    let exe;
+    try {
+        exe = findNatBridgeExecutable();
+    } catch (e) {
+        error('Error while searching for nat-bridge executable: ' + e.message);
+        rl.close();
+        return;
+    }
 
     if (!exe) {
-        console.log("nat-bridge executable not found.");
+        error('nat-bridge executable not found. Make sure it is in the same directory as this launcher.');
         rl.close();
         return;
     }
 
-    let mode = await prompt("Enter mode (host/client): ");
-    mode = mode.trim().toLowerCase();
-    if (mode !== "host" && mode !== "client") {
-        console.log("Invalid mode. Please enter 'host' or 'client'.");
+    let loadFromFile;
+    try {
+        loadFromFile = await prompt('Load configuration from file? (yes/no, default is no): ');
+        loadFromFile = loadFromFile.trim().toLowerCase() === 'yes';
+    } catch (e) {
+        error('Error reading input: ' + e.message);
+        rl.close();
+        return;
+    }
+    if (loadFromFile) {
+        let configFile;
+        try {
+            configFile = await prompt('Enter configuration file path: ');
+            configFile = configFile.trim();
+        } catch (e) {
+            error('Error reading input: ' + e.message);
+            rl.close();
+            return;
+        }
+        if (!configFile) {
+            warn('Configuration file path cannot be empty.');
+            rl.close();
+            return;
+        }
+        if (!fs.existsSync(configFile)) {
+            error(`Configuration file '${configFile}' not found.`);
+            rl.close();
+            return;
+        }
+        rl.close();
+        info('Launching nat-bridge with configuration file... \n');
+        const args = ['config', configFile];
+        try {
+            const child = spawnSync(exe, args, { stdio: 'inherit', shell: true });
+            if (child.error) throw child.error;
+        } catch (e) {
+            error('Failed to launch nat-bridge: ' + e.message);
+        }
+        return;
+    }
+
+    let mode;
+    try {
+        mode = await prompt('Enter mode (host/client): ');
+        mode = mode.trim().toLowerCase();
+        if (mode !== 'host' && mode !== 'client') {
+            error("Invalid mode. Please enter 'host' or 'client'.");
+            rl.close();
+            return;
+        }
+    } catch (e) {
+        error('Error reading input: ' + e.message);
         rl.close();
         return;
     }
 
-    let bridgeID = await prompt("Enter bridge ID (default is a randomly generated ID): ");
-    bridgeID = bridgeID.trim() || generateRandomID();
-    bridgeID = bridgeID.replaceAll(" ", "-");
-    bridgeID = bridgeID.replace(/[^a-zA-Z0-9_-]/g, "");
-
-    if (bridgeID.length < 8 || bridgeID.length > 64) {
-        console.log("Invalid bridge ID. Please enter an ID between 8 and 64 characters.");
+    let bridgeID;
+    try {
+        bridgeID = await prompt('Enter bridge ID (default is a randomly generated ID): ');
+        bridgeID = bridgeID.trim() || generateRandomID();
+        bridgeID = bridgeID.replaceAll(' ', '-');
+        bridgeID = bridgeID.replace(/[^a-zA-Z0-9_-]/g, '');
+        if (bridgeID.length < 8 || bridgeID.length > 64) {
+            error('Invalid bridge ID. Please enter an ID between 8 and 64 characters.');
+            rl.close();
+            return;
+        }
+    } catch (e) {
+        error('Error reading input: ' + e.message);
         rl.close();
         return;
     }
 
-    let protocol = await prompt(`Enter protocol [${mode == "host" ? "tcp|udp|both" : "tcp|udp"}] (default is 'tcp'): `);
-    protocol = protocol.trim() || "tcp";
-    if (mode === "host" && !["tcp", "udp", "both"].includes(protocol)) {
-        console.log("Invalid protocol. Please enter 'tcp', 'udp', or 'both'.");
-        rl.close();
-        return;
-    } else if (mode === "client" && !["tcp", "udp"].includes(protocol)) {
-        console.log("Invalid protocol. Please enter 'tcp' or 'udp'.");
+    let protocol;
+    try {
+        protocol = await prompt(`Enter protocol [${mode == 'host' ? 'tcp|udp|both' : 'tcp|udp'}] (default is 'tcp'): `);
+        protocol = protocol.trim() || 'tcp';
+        if (mode === 'host' && !['tcp', 'udp', 'both'].includes(protocol)) {
+            error("Invalid protocol. Please enter 'tcp', 'udp', or 'both'.");
+            rl.close();
+            return;
+        } else if (mode === 'client' && !['tcp', 'udp'].includes(protocol)) {
+            error("Invalid protocol. Please enter 'tcp' or 'udp'.");
+            rl.close();
+            return;
+        }
+    } catch (e) {
+        error('Error reading input: ' + e.message);
         rl.close();
         return;
     }
 
-    let port = await prompt("Enter port (default 8080): ");
-    port = port.trim() || "8080";
-
-    if (!/^\d+$/.test(port) || parseInt(port) < 1 || parseInt(port) > 65535) {
-        console.log("Invalid port. Please enter a number between 1 and 65535.");
+    let port;
+    try {
+        port = await prompt('Enter port (default 8080): ');
+        port = port.trim() || '8080';
+        if (!/^\d+$/.test(port) || parseInt(port) < 1 || parseInt(port) > 65535) {
+            error('Invalid port. Please enter a number between 1 and 65535.');
+            rl.close();
+            return;
+        }
+    } catch (e) {
+        error('Error reading input: ' + e.message);
         rl.close();
-        return; 
+        return;
     }
 
-    let verbose = await prompt("Enable verbose logging? (yes/no, default is no): ");
-    verbose = verbose.trim().toLowerCase() === "yes" ? "--verbose" : "";
+    let verbose;
+    try {
+        verbose = await prompt('Enable verbose logging? (yes/no, default is no): ');
+        verbose = verbose.trim().toLowerCase() === 'yes' ? '--verbose' : '';
+    } catch (e) {
+        error('Error reading input: ' + e.message);
+        rl.close();
+        return;
+    }
 
     rl.close();
 
-    console.log(`Starting nat-bridge in ${mode} mode with ID '${bridgeID}' on port ${port} using protocol '${protocol}'${verbose ? " with verbose logging" : ""}. \n`);
+    info(`Starting nat-bridge in ${mode} mode with ID '${bridgeID}' on port ${port} using protocol '${protocol}'${verbose ? ' with verbose logging' : ''}. \n`);
 
-    const args = [mode, bridgeID, "--port", port, "--protocol", protocol, verbose];
-    const child = spawnSync(exe, args, { stdio: "inherit", shell: true });
+    const args = [mode, bridgeID, '--port', port, '--protocol', protocol, verbose];
+    try {
+        const child = spawnSync(exe, args, { stdio: 'inherit', shell: true });
+        if (child.error) throw child.error;
+    } catch (e) {
+        error('Failed to launch nat-bridge: ' + e.message);
+    }
 })();
