@@ -40,6 +40,14 @@ function generateRandomID() {
     return Math.random().toString(36).substring(2, 15);
 }
 
+function waitForEnterAndExit() {
+    const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl2.question(color('Press Enter to exit...', '90'), () => {
+        rl2.close();
+        process.exit(1);
+    });
+}
+
 (async () => {
     let exe;
     try {
@@ -47,12 +55,14 @@ function generateRandomID() {
     } catch (e) {
         error('Error while searching for nat-bridge executable: ' + e.message);
         rl.close();
+        waitForEnterAndExit();
         return;
     }
 
     if (!exe) {
         error('nat-bridge executable not found. Make sure it is in the same directory as this launcher.');
         rl.close();
+        waitForEnterAndExit();
         return;
     }
 
@@ -63,6 +73,7 @@ function generateRandomID() {
     } catch (e) {
         error('Error reading input: ' + e.message);
         rl.close();
+        waitForEnterAndExit();
         return;
     }
     if (loadFromFile) {
@@ -73,21 +84,24 @@ function generateRandomID() {
         } catch (e) {
             error('Error reading input: ' + e.message);
             rl.close();
+            waitForEnterAndExit();
             return;
         }
         if (!configFile) {
             warn('Configuration file path cannot be empty.');
             rl.close();
+            waitForEnterAndExit();
             return;
         }
         if (!fs.existsSync(configFile)) {
             error(`Configuration file '${configFile}' not found.`);
             rl.close();
+            waitForEnterAndExit();
             return;
         }
         rl.close();
         info('Launching nat-bridge with configuration file...');
-        const args = ['config', '\"'+configFile+'\"'];
+        const args = ['config', '"'+configFile+'"'];
         try {
             for (let i = 0; i < 3; i++) {
                 process.stdout.write('\x1b[1A');
@@ -97,6 +111,7 @@ function generateRandomID() {
             if (child.error) throw child.error;
         } catch (e) {
             error('Failed to launch nat-bridge: ' + e.message);
+            waitForEnterAndExit();
         }
         return;
     }
@@ -108,11 +123,13 @@ function generateRandomID() {
         if (mode !== 'host' && mode !== 'client') {
             error("Invalid mode. Please enter 'host' or 'client'.");
             rl.close();
+            waitForEnterAndExit();
             return;
         }
     } catch (e) {
         error('Error reading input: ' + e.message);
         rl.close();
+        waitForEnterAndExit();
         return;
     }
 
@@ -124,6 +141,7 @@ function generateRandomID() {
         } else if (mode === 'client' && !bridgeID) {
             error('Bridge ID is required in client mode.');
             rl.close();
+            waitForEnterAndExit();
             return;
         }
         bridgeID = bridgeID.trim();
@@ -132,11 +150,13 @@ function generateRandomID() {
         if (bridgeID.length < 8 || bridgeID.length > 64) {
             error('Invalid bridge ID. Please enter an ID between 8 and 64 characters.');
             rl.close();
+            waitForEnterAndExit();
             return;
         }
     } catch (e) {
         error('Error reading input: ' + e.message);
         rl.close();
+        waitForEnterAndExit();
         return;
     }
 
@@ -147,15 +167,18 @@ function generateRandomID() {
         if (mode === 'host' && !['tcp', 'udp', 'both'].includes(protocol)) {
             error("Invalid protocol. Please enter 'tcp', 'udp', or 'both'.");
             rl.close();
+            waitForEnterAndExit();
             return;
         } else if (mode === 'client' && !['tcp', 'udp'].includes(protocol)) {
             error("Invalid protocol. Please enter 'tcp' or 'udp'.");
             rl.close();
+            waitForEnterAndExit();
             return;
         }
     } catch (e) {
         error('Error reading input: ' + e.message);
         rl.close();
+        waitForEnterAndExit();
         return;
     }
 
@@ -166,11 +189,13 @@ function generateRandomID() {
         if (!/^\d+$/.test(port) || parseInt(port) < 1 || parseInt(port) > 65535) {
             error('Invalid port. Please enter a number between 1 and 65535.');
             rl.close();
+            waitForEnterAndExit();
             return;
         }
     } catch (e) {
         error('Error reading input: ' + e.message);
         rl.close();
+        waitForEnterAndExit();
         return;
     }
 
@@ -181,6 +206,7 @@ function generateRandomID() {
     } catch (e) {
         error('Error reading input: ' + e.message);
         rl.close();
+        waitForEnterAndExit();
         return;
     }
 
@@ -198,5 +224,6 @@ function generateRandomID() {
         if (child.error) throw child.error;
     } catch (e) {
         error('Failed to launch nat-bridge: ' + e.message);
+        waitForEnterAndExit();
     }
 })();
