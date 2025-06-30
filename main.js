@@ -4,9 +4,10 @@ const Hyperswarm = require('hyperswarm');
 const crypto = require('crypto');
 const multiplex = require('multiplex');
 const https = require('https');
-const VERSION = '1.0.2';
-const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/nat-bridge/main/VERSION';
+const pump = require('pump');
 
+const VERSION = '1.0.3';
+const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/nat-bridge/main/VERSION';
 
 https.get(VERSION_CHECK_URL, (res) => {
 	let data = '';
@@ -15,30 +16,47 @@ https.get(VERSION_CHECK_URL, (res) => {
 		const remoteVersion = data.trim()
 		.split("\n----------\n")[0] // future-proofing if I want to add more stuff later
 		.split("\n");
+		stopSpinner();
 		if (remoteVersion.length === 0) {
 			warn('Could not retrieve remote version information.');
+			if (mode == "client") {
+				startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
+			} else {
+				startSpinner(`waiting for P2P connections...`);
+			}
 			return;
 		}
 		if (remoteVersion && remoteVersion[0] !== VERSION) {
 			console.log(color('[UPDATE]', '33'), `A new version (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
 			console.log(color('[UPDATE]', '33'), 'Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
 			if (remoteVersion.length > 1) {
-				console.log(color('[UPDATE]', '33'), `Changelog: \n ${remoteVersion.slice(1).join('\n')}`);
+				console.log(color('[UPDATE]', '33'), `Changelog: \n${remoteVersion.slice(1).join('\n')}`);
+			}
+			if (mode == "client") {
+				startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
+			} else {
+				startSpinner(`waiting for P2P connections...`);
 			}
 		}
 	});
 }).on('error', () => {
+	stopSpinner();
 	warn('Could not check for updates.');
+	if (mode == "client") {
+		startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
+	} else {
+		startSpinner(`waiting for P2P connections...`);
+	}
 });
 
 // Helpers
 const args = process.argv.slice(2);
 const color = (text, c) => process.stdout.isTTY ? `\x1b[${c}m${text}\x1b[0m` : text;
 const info = (msg) => console.log(color('[INFO]', '36'), msg);
-const warn = (msg) => console.warn(color('[WARN]', '33'), msg);
+const warn = (msg) => { if (!isExpectedDisconnect(msg.toString())) console.warn(color('[WARN]', '33'), msg); }
 const error = (msg) => console.error(color('[ERROR]', '31'), msg);
 const sucsess = (msg) => console.log(color('[SUCCESS]', '32'), msg);
-const verboseLog = (...msg) => VERBOSE && console.log(color('[VERBOSE]', '90'), ...msg);
+const verboseLog = (msg) => VERBOSE && console.log(color('[VERBOSE]', '90'), msg);
 
 let spinner = false;
 let spinnerIndex = 0;
@@ -67,12 +85,14 @@ const stopSpinner = () => {
 let tcpServer = null;
 let udpSocket = null;
 const activeStreams = new Set();
+let connectedToHost = false;
 
 // Defaults
 let listenPort = 5000;
 let remotePort = 8080;
 let protocol = 'tcp';
 let VERBOSE = false;
+let EXPECTEDWARNINGS = false;
 
 // Arg parsing
 let mode = args[0];
@@ -84,6 +104,7 @@ for (let i = 2; i < args.length; i++) {
 	else if (args[i] === '--protocol' || (args[i] === '-p' && args[i + 1])) protocol = args[++i].toLowerCase();
 	else if (args[i] === '--verbose' || (args[i] === '-v')) VERBOSE = true;
 	else if (args[i] === '--help' || (args[i] === '-h')) return printHelpAndExit();
+	else if (args[i] === '--warnings' || (args[i] === '-w')) EXPECTEDWARNINGS = true;
 }
 
 if (!['host', 'client', 'config'].includes(mode) || !bridgeId || !['tcp', 'udp', 'both'].includes(protocol)) {
@@ -132,6 +153,7 @@ Options:
   -l, --listen <port>       Port to listen on client (default: 5000)
   -p, --protocol tcp|udp|both   Protocol to tunnel (default: tcp)
   -v, --verbose             Enable verbose logging
+  -w, --warnings            Enable expected warnings (e.g., ECONNRESET)
   -h, --help                Show this help
 
 Examples:
@@ -199,19 +221,19 @@ swarm.on('connection', (socket) => {
 		const stopReading = readLines(socket, (line) => {
 			if (stage === 0) {
 				if (line === "HELLO:host") {
-					warn("[CONFLICT] Another host attempted to connect. Ignoring. (You may want to change your bridge ID)");
-					stopReading(); socket.destroy();
+					warn(color("[CONFLICT]", 31) + " Another host attempted to connect. Ignoring. (You may want to change your bridge ID)");
+					stopReading(); rejectAndDestroy(socket, "Host-to-host conflict", true);
 				} else if (line === "HELLO:client") {
 					stage = 1;
 				} else {
 					error("Invalid initial handshake message from client.");
-					stopReading(); socket.destroy();
+					stopReading(); rejectAndDestroy(socket, "Invalid initial handshake");
 				}
 			} else if (stage === 1) {
 				const { protocol: clientProtocol } = safeJSON(line);
 				if (!clientProtocol || (protocol !== 'both' && clientProtocol !== protocol)) {
 					error(`Unsupported or missing protocol from client: ${line}`);
-					stopReading(); socket.destroy();
+					stopReading(); rejectAndDestroy(socket, "Unsupported protocol from client");
 					return;
 				}
 
@@ -228,7 +250,7 @@ swarm.on('connection', (socket) => {
 			}
 		});
 
-	} else if (mode === 'client') {
+	} else if (mode === 'client' && !connectedToHost) {
 		socket.write("HELLO:client\n");
 		let stage = 0;
 
@@ -236,27 +258,29 @@ swarm.on('connection', (socket) => {
 			if (stage === 0) {
 				if (line === "HELLO:client") {
 					warn("Another client tried to connect to this client. Ignoring.");
-					stopReading(); socket.destroy();
+					stopReading(); rejectAndDestroy(socket, "Client-to-client conflict");
 				} else if (line === "HELLO:host") {
 					stage = 1;
 					socket.write(JSON.stringify({ protocol }) + '\n');
 				} else {
 					error("Invalid handshake from host.");
-					stopReading(); socket.destroy();
+					stopReading(); rejectAndDestroy(socket, "Invalid initial handshake");
 				}
 			} else if (stage === 1) {
 				const reply = safeJSON(line);
 				if (!reply.protocol || reply.protocol !== protocol) {
 					error("Host does not support requested protocol.");
-					stopReading(); socket.destroy();
+					stopReading(); rejectAndDestroy(socket, "Unsupported protocol from host");
 				} else {
 					stopReading();
+					connectedToHost = true;
 					try {
 						if (protocol === 'tcp') setupTCPClient(socket);
 						else if (protocol === 'udp') setupUDPClient(socket);
 					} catch (e) {
 						error(`Failed to setup client stream: ${e.message}`);
 						socket.destroy();
+						connectedToHost = false;
 					}
 				}
 			}
@@ -267,7 +291,9 @@ swarm.on('connection', (socket) => {
 // TCP Host
 function setupTCPHost(socket) {
 	const mux = multiplex();
-	socket.pipe(mux).pipe(socket);
+	pump(socket, mux, socket, (err) => {
+		if (err && !isExpectedDisconnect(err)) warn(`Pump error: ${err.message}`);
+	});
 
 	mux.on('error', (err) => warn(`Multiplex error: ${err.message}`));
 
@@ -291,7 +317,9 @@ function setupTCPHost(socket) {
 // TCP Client
 function setupTCPClient(socket) {
 	const mux = multiplex();
-	socket.pipe(mux).pipe(socket);
+	pump(socket, mux, socket, (err) => {
+		if (err && !isExpectedDisconnect(err)) warn(`Pump error: ${err.message}`);
+	});
 	mux.on('error', (err) => warn(`Multiplex error: ${err.message}`));
 
 	tcpServer = net.createServer((local) => {
@@ -316,7 +344,9 @@ function setupTCPClient(socket) {
 // UDP Host
 function setupUDPHost(socket) {
 	const mux = multiplex();
-	socket.pipe(mux).pipe(socket);
+	pump(socket, mux, socket, (err) => {
+		if (err && !isExpectedDisconnect(err)) warn(`Pump error: ${err.message}`);
+	});
 
 	mux.on('error', (err) => warn(`Multiplex error: ${err.message}`));
 
@@ -347,7 +377,9 @@ function setupUDPHost(socket) {
 // UDP Client
 function setupUDPClient(socket) {
 	const mux = multiplex();
-	socket.pipe(mux).pipe(socket);
+	pump(socket, mux, socket, (err) => {
+		if (err && !isExpectedDisconnect(err)) warn(`Pump error: ${err.message}`);
+	});
 	mux.on('error', (err) => warn(`Multiplex error: ${err.message}`));
 
 	udpSocket = dgram.createSocket('udp4');
@@ -390,6 +422,28 @@ function preview(buf) {
 	return str.length > 60 ? str.slice(0, 57) + '...' : str;
 }
 
+function isExpectedDisconnect(err) {
+	if (!err || typeof err !== 'string') err = err.message || '';
+	return err && (
+		!EXPECTEDWARNINGS && (
+		err.includes('reset by peer') ||
+		err.includes('Channel destroyed') ||
+		err.includes('Readable stream closed before ending') ||
+		err.includes('ECONNRESET')
+	));
+}
+
+let rejectedPeers = new Set();
+
+function rejectAndDestroy(socket, reason, block = false) {
+	const key = socket.remoteAddress + ':' + socket.remotePort;
+	if (rejectedPeers.has(key)) return;
+	if (block) rejectedPeers.add(key);
+	warn("Regected Peer: "+reason);
+	socket.destroy();
+	setTimeout(() => rejectedPeers.delete(key), 10000); // 10s cooldown
+}
+
 swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' })
 swarm.on('error', (err) => {
 	error(`Swarm error: ${err.message}`);
@@ -397,17 +451,17 @@ swarm.on('error', (err) => {
 });
 
 swarm.on('close', () => {
-  warn("Disconected. Attempting reconnect in 5 seconds...");
-  setTimeout(() => swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' }), 5000);
+	warn("Disconected. Attempting reconnect in 5 seconds...");
+	setTimeout(() => swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' }), 5000);
 });
 
 let exiting = false;
 
 // Cleanup
 function gracefulExit(code = 0) {
+	stopSpinner();
 	if(!exiting) info('Shutting down gracefully...');
 	exiting = true;
-	stopSpinner();
 
 	if (tcpServer) {
 		tcpServer.close(() => info('TCP server closed'));
@@ -419,13 +473,17 @@ function gracefulExit(code = 0) {
 
 	for (const stream of activeStreams) {
 		try {
-			stream.end();
-			stream.once('finish', () => {
-				if (!stream.destroyed) stream.destroy();
-			});
-			setTimeout(() => {
-				if (!stream.destroyed) stream.destroy();
-			}, 2000);
+			if (!stream.destroyed && !stream.writableEnded) {
+				stream.end();
+				stream.once('finish', () => {
+					if (!stream.destroyed) stream.destroy();
+				});
+				setTimeout(() => {
+					if (!stream.destroyed) stream.destroy();
+				}, 2000);
+			} else if (!stream.destroyed) {
+				stream.destroy();
+			}
 		} catch (err) {
 			warn(`Error while closing stream: ${err.message}`);
 		}
@@ -436,6 +494,8 @@ function gracefulExit(code = 0) {
 		info('Swarm closed');
 		process.exit(code);
 	});
+
+	process.exit(code);
 }
 
 process.on('SIGINT', () => gracefulExit(0));
