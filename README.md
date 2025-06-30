@@ -42,6 +42,7 @@ node main.js <host|client> <bridge-id> [options]
 | `-p`, `--protocol <type>`   | Protocol to tunnel: `tcp`, `udp`, `both`    | tcp       |
 | `-v`, `--verbose`           | Enable verbose logging                      |           |
 | `-h`, `--help`              | Show help                                   |           |
+| `-w`, `--warnings`          | shows expected warnings                     |           |
 
 ---
 
@@ -87,11 +88,12 @@ node main.js client mybridge2 --listen 9000 --protocol tcp
 - Node.js v14+
 - [Hyperswarm](https://github.com/hyperswarm/hyperswarm)
 - [multiplex](https://github.com/maxogden/multiplex)
+- [pump](https://github.com/mafintosh/pump)
 
 Install dependencies with:
 
 ```bash
-npm install hyperswarm multiplex
+npm install hyperswarm multiplex pump
 ```
 
 ---
@@ -119,12 +121,9 @@ npm install hyperswarm multiplex
 ---
 
 ## Notes
-- The warning `[WARN] Socket error: connection reset by peer` is common and often harmless.
 - If you get the warning `[WARN] [CONFLICT] Another host attempted to connect. Ignoring.` you may want to change your bridge ID.
 - The releases are released as executable files.
 - The launcher only works for realeases and is bundeled in the zip file with the `nat-tunnel.exe`.
-- When exiting in client mode it will say `[WARN] Multiplex error: Readable stream closed before ending`.
-- This project is basicly duct taped together so expect a bunch of random warnings. ¯\\\_(ツ)\_/¯
 
 ---
 
