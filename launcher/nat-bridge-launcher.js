@@ -69,7 +69,7 @@ function generateRandomID() {
         let configFile;
         try {
             configFile = await prompt('Enter configuration file path: ');
-            configFile = configFile.trim();
+            //configFile = configFile.trim();
         } catch (e) {
             error('Error reading input: ' + e.message);
             rl.close();
@@ -86,9 +86,13 @@ function generateRandomID() {
             return;
         }
         rl.close();
-        info('Launching nat-bridge with configuration file... \n');
-        const args = ['config', configFile];
+        info('Launching nat-bridge with configuration file...');
+        const args = ['config', '\"'+configFile+'\"'];
         try {
+            for (let i = 0; i < 3; i++) {
+                process.stdout.write('\x1b[1A');
+                process.stdout.write('\r\x1b[2K');
+            }
             const child = spawnSync(exe, args, { stdio: 'inherit', shell: true });
             if (child.error) throw child.error;
         } catch (e) {
@@ -114,8 +118,15 @@ function generateRandomID() {
 
     let bridgeID;
     try {
-        bridgeID = await prompt('Enter bridge ID (default is a randomly generated ID): ');
-        bridgeID = bridgeID.trim() || generateRandomID();
+        bridgeID = await prompt('Enter bridge ID'+(mode == 'host' ? '(default is a randomly generated ID): ' : ': '));
+        if (mode === 'host' && !bridgeID) {
+            bridgeID = generateRandomID();
+        } else if (mode === 'client' && !bridgeID) {
+            error('Bridge ID is required in client mode.');
+            rl.close();
+            return;
+        }
+        bridgeID = bridgeID.trim();
         bridgeID = bridgeID.replaceAll(' ', '-');
         bridgeID = bridgeID.replace(/[^a-zA-Z0-9_-]/g, '');
         if (bridgeID.length < 8 || bridgeID.length > 64) {
@@ -132,7 +143,7 @@ function generateRandomID() {
     let protocol;
     try {
         protocol = await prompt(`Enter protocol [${mode == 'host' ? 'tcp|udp|both' : 'tcp|udp'}] (default is 'tcp'): `);
-        protocol = protocol.trim() || 'tcp';
+        protocol = protocol.trim().toLowerCase() || 'tcp';
         if (mode === 'host' && !['tcp', 'udp', 'both'].includes(protocol)) {
             error("Invalid protocol. Please enter 'tcp', 'udp', or 'both'.");
             rl.close();
@@ -150,8 +161,8 @@ function generateRandomID() {
 
     let port;
     try {
-        port = await prompt('Enter port (default 8080): ');
-        port = port.trim() || '8080';
+        port = await prompt('Enter port '+(mode == 'host' ? '(default 8080): ' : '(default 5000): '));
+        port = port.trim() || (mode == 'host' ? '8080': '5000');
         if (!/^\d+$/.test(port) || parseInt(port) < 1 || parseInt(port) > 65535) {
             error('Invalid port. Please enter a number between 1 and 65535.');
             rl.close();
@@ -175,10 +186,14 @@ function generateRandomID() {
 
     rl.close();
 
-    info(`Starting nat-bridge in ${mode} mode with ID '${bridgeID}' on port ${port} using protocol '${protocol}'${verbose ? ' with verbose logging' : ''}. \n`);
+    info(`Starting nat-bridge in ${mode} mode with ID '${bridgeID}' on port ${port} using protocol '${protocol}'${verbose ? ' with verbose logging' : ''}.`);
 
     const args = [mode, bridgeID, '--port', port, '--protocol', protocol, verbose];
     try {
+        for (let i = 0; i < 7; i++) {
+            process.stdout.write('\x1b[1A');
+            process.stdout.write('\r\x1b[2K');
+        }
         const child = spawnSync(exe, args, { stdio: 'inherit', shell: true });
         if (child.error) throw child.error;
     } catch (e) {
