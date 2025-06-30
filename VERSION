@@ -1,5 +1,4 @@
-1.0.2
-- fixed a bug were the client just hanged after attempting to exit
-- now more politely closes sockets when exiting 
-- added a cool spinner thingy when locating peers
-- added a success message when connecting to a peer
+1.0.3
+- no longer prints expected warnings (these can be re-activated with "-w" or "--warnings")
+- utilises the "pump" node library for better pipe error handling
+- fixed a bug AGAIN where the process would refuse to exit and just hang
