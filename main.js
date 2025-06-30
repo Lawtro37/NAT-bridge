@@ -9,46 +9,6 @@ const pump = require('pump');
 const VERSION = '1.0.3';
 const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/nat-bridge/main/VERSION';
 
-https.get(VERSION_CHECK_URL, (res) => {
-	let data = '';
-	res.on('data', chunk => data += chunk);
-	res.on('end', () => {
-		const remoteVersion = data.trim()
-		.split("\n----------\n")[0] // future-proofing if I want to add more stuff later
-		.split("\n");
-		stopSpinner();
-		if (remoteVersion.length === 0) {
-			warn('Could not retrieve remote version information.');
-			if (mode == "client") {
-				startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
-			} else {
-				startSpinner(`waiting for P2P connections...`);
-			}
-			return;
-		}
-		if (remoteVersion && remoteVersion[0] !== VERSION) {
-			console.log(color('[UPDATE]', '33'), `A new version (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
-			console.log(color('[UPDATE]', '33'), 'Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
-			if (remoteVersion.length > 1) {
-				console.log(color('[UPDATE]', '33'), `Changelog: \n${remoteVersion.slice(1).join('\n')}`);
-			}
-			if (mode == "client") {
-				startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
-			} else {
-				startSpinner(`waiting for P2P connections...`);
-			}
-		}
-	});
-}).on('error', () => {
-	stopSpinner();
-	warn('Could not check for updates.');
-	if (mode == "client") {
-		startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
-	} else {
-		startSpinner(`waiting for P2P connections...`);
-	}
-});
-
 // Helpers
 const args = process.argv.slice(2);
 const color = (text, c) => process.stdout.isTTY ? `\x1b[${c}m${text}\x1b[0m` : text;
@@ -58,28 +18,29 @@ const error = (msg) => console.error(color('[ERROR]', '31'), msg);
 const sucsess = (msg) => console.log(color('[SUCCESS]', '32'), msg);
 const verboseLog = (msg) => VERBOSE && console.log(color('[VERBOSE]', '90'), msg);
 
-let spinner = false;
+let spinnerInterval = null;
 let spinnerIndex = 0;
 const spinnerChars = ['|', '/', '-', '\\'];
-let spinnerInterval;
-let spinnerMessageLength = 0;
+let currentSpinnerMessage = '';
 
 const startSpinner = (message) => {
 	if (!process.stdout.isTTY) return;
-	spinner = true;
-	spinnerMessageLength = message.length;
-	process.stdout.write('');
-	if (spinnerInterval) clearInterval(spinnerInterval);
+	stopSpinner(); // Prevent duplicate spinners
+	currentSpinnerMessage = message;
+	spinnerIndex = 0;
 	spinnerInterval = setInterval(() => {
-		process.stdout.write(`\r${color('[WAIT]', '90')} ${message} ${spinnerChars[spinnerIndex++]}`);
-		spinnerIndex %= spinnerChars.length;
-	}, 200);
+		const char = spinnerChars[spinnerIndex++ % spinnerChars.length];
+		const line = `${color('[WAIT]', '90')} ${currentSpinnerMessage} ${char}`;
+		process.stdout.write('\r' + line + ' '.repeat(Math.max(0, process.stdout.columns - line.length)));
+	}, 100);
 };
+
 const stopSpinner = () => {
-	if (!spinner) return;
-	spinner = false;
-	if (spinnerInterval) clearInterval(spinnerInterval);
-	process.stdout.write('\r' + ' '.repeat(spinnerMessageLength+10) + '\r');
+	if (!spinnerInterval || !process.stdout.isTTY) return;
+	clearInterval(spinnerInterval);
+	spinnerInterval = null;
+	const clearLine = '\r' + ' '.repeat(process.stdout.columns || 80) + '\r';
+	process.stdout.write(clearLine);
 };
 
 let tcpServer = null;
@@ -188,6 +149,48 @@ if (mode == "client") {
 } else {
 	startSpinner(`waiting for P2P connections...`);
 }
+
+// Version Check
+https.get(VERSION_CHECK_URL, (res) => {
+	let data = '';
+	res.on('data', chunk => data += chunk);
+	res.on('end', () => {
+		const remoteVersion = data.trim()
+		.split("\n----------\n")[0] // future-proofing if I want to add more stuff later
+		.split("\n");
+		if (remoteVersion.length === 0) {
+			stopSpinner();
+			warn('Could not retrieve remote version information.');
+			if (mode == "client") {
+				startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
+			} else {
+				startSpinner(`waiting for P2P connections...`);
+			}
+			return;
+		}
+		if (remoteVersion && remoteVersion[0] !== VERSION) {
+			stopSpinner();
+			console.log(color('[UPDATE]', '33'), `A new version (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
+			console.log(color('[UPDATE]', '33'), 'Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
+			if (remoteVersion.length > 1) {
+				console.log(color('[UPDATE]', '33'), `Changelog: \n${remoteVersion.slice(1).join('\n')}`);
+			}
+			if (mode == "client") {
+				startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
+			} else {
+				startSpinner(`waiting for P2P connections...`);
+			}
+		}
+	});
+}).on('error', () => {
+	stopSpinner();
+	warn('Could not check for updates.');
+	if (mode == "client") {
+		startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
+	} else {
+		startSpinner(`waiting for P2P connections...`);
+	}
+});
 
 // P2P Setup
 const swarm = new Hyperswarm();
@@ -300,6 +303,7 @@ function setupTCPHost(socket) {
 	mux.on('stream', (stream, id) => {
 		info(`New TCP stream ${id}`);
 		const target = net.connect(remotePort, '127.0.0.1');
+		target.setNoDelay(true);
 
 		stream.on('data', (data) => verboseLog(`[TCP ${id}] client → host (${data.length} bytes)`, preview(data)));
 		target.on('data', (data) => verboseLog(`[TCP ${id}] host → client (${data.length} bytes)`, preview(data)));
