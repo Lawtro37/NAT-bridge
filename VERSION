@@ -1,4 +1,3 @@
-1.0.3
-- no longer prints expected warnings (these can be re-activated with "-w" or "--warnings")
-- utilises the "pump" node library for better pipe error handling
-- fixed a bug AGAIN where the process would refuse to exit and just hang
+1.0.4
+- added authentication through shared secrets 
+- bug fixes amoung other things
