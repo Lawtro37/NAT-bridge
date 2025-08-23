@@ -518,7 +518,6 @@ function setupTCPHost(p2pSocket) {
 }
 
 function setupTCPClient(p2pSocket) {
-  console.log('[DEBUG] setupTCPClient called');
   const mux = multiplex();
   pump(p2pSocket, mux, p2pSocket, (err) => {
     if (err && !isExpectedDisconnect(err)) warn(`Pump error: ${err.message}`);
