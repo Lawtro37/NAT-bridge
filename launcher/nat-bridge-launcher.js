@@ -1,12 +1,12 @@
 // ------------------------------------------------------------------------------------------------------------
-// A simple command-line launcher for the nat-bridge tool.
-// This script is for people who want to use nat-bridge without knowing how to use the command line.
+// A simple command-line launcher for the nat-bridge tool with advanced options.
 // ------------------------------------------------------------------------------------------------------------
 
 const readline = require("readline");
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
+const path = require("path");
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -26,7 +26,6 @@ function prompt(question) {
 function findNatBridgeExecutable() {
     const isWin = os.platform() === "win32";
     if (isWin) {
-        const path = require("path");
         const exePath = path.resolve(__dirname, "nat-bridge.exe");
         if (fs.existsSync(exePath)) return exePath;
     }
@@ -66,162 +65,98 @@ function waitForEnterAndExit() {
         return;
     }
 
-    let loadFromFile;
-    try {
-        loadFromFile = await prompt('Load configuration from file? (yes/no, default is no): ');
-        loadFromFile = loadFromFile.trim().toLowerCase() === 'yes';
-    } catch (e) {
-        error('Error reading input: ' + e.message);
-        rl.close();
-        waitForEnterAndExit();
-        return;
-    }
+    // === Option: Load from config file ===
+    let loadFromFile = (await prompt('Load configuration from file? (yes/no, default no): ')).trim().toLowerCase() === 'yes';
     if (loadFromFile) {
-        let configFile;
-        try {
-            configFile = await prompt('Enter configuration file path: ');
-            //configFile = configFile.trim();
-        } catch (e) {
-            error('Error reading input: ' + e.message);
-            rl.close();
-            waitForEnterAndExit();
-            return;
-        }
+        let configFile = (await prompt('Enter configuration file path: ')).trim();
         if (!configFile) {
             warn('Configuration file path cannot be empty.');
-            rl.close();
-            waitForEnterAndExit();
-            return;
+            rl.close(); waitForEnterAndExit(); return;
         }
         if (!fs.existsSync(configFile)) {
             error(`Configuration file '${configFile}' not found.`);
-            rl.close();
-            waitForEnterAndExit();
-            return;
+            rl.close(); waitForEnterAndExit(); return;
         }
         rl.close();
         info('Launching nat-bridge with configuration file...');
-        const args = ['config', '"'+configFile+'"'];
-        try {
-            for (let i = 0; i < 3; i++) {
-                process.stdout.write('\x1b[1A');
-                process.stdout.write('\r\x1b[2K');
-            }
-            const child = spawnSync(exe, args, { stdio: 'inherit', shell: true });
-            if (child.error) throw child.error;
-        } catch (e) {
-            error('Failed to launch nat-bridge: ' + e.message);
-            waitForEnterAndExit();
-        }
+        try { spawnSync(exe, ['config', `"${configFile}"`], { stdio: 'inherit', shell: true }); }
+        catch (e) { error('Failed to launch nat-bridge: ' + e.message); waitForEnterAndExit(); }
         return;
     }
 
-    let mode;
-    try {
-        mode = await prompt('Enter mode (host/client): ');
-        mode = mode.trim().toLowerCase();
-        if (mode !== 'host' && mode !== 'client') {
-            error("Invalid mode. Please enter 'host' or 'client'.");
-            rl.close();
-            waitForEnterAndExit();
-            return;
-        }
-    } catch (e) {
-        error('Error reading input: ' + e.message);
-        rl.close();
-        waitForEnterAndExit();
-        return;
+    // === Interactive mode ===
+    let mode = (await prompt('Enter mode (host/client): ')).trim().toLowerCase();
+    if (!['host', 'client'].includes(mode)) {
+        error("Invalid mode. Must be 'host' or 'client'.");
+        rl.close(); waitForEnterAndExit(); return;
     }
 
-    let bridgeID;
-    try {
-        bridgeID = await prompt('Enter bridge ID'+(mode == 'host' ? '(default is a randomly generated ID): ' : ': '));
-        if (mode === 'host' && !bridgeID) {
-            bridgeID = generateRandomID();
-        } else if (mode === 'client' && !bridgeID) {
-            error('Bridge ID is required in client mode.');
-            rl.close();
-            waitForEnterAndExit();
-            return;
-        }
-        bridgeID = bridgeID.trim();
-        bridgeID = bridgeID.replaceAll(' ', '-');
-        bridgeID = bridgeID.replace(/[^a-zA-Z0-9_-]/g, '');
-        if (bridgeID.length < 8 || bridgeID.length > 64) {
-            error('Invalid bridge ID. Please enter an ID between 8 and 64 characters.');
-            rl.close();
-            waitForEnterAndExit();
-            return;
-        }
-    } catch (e) {
-        error('Error reading input: ' + e.message);
-        rl.close();
-        waitForEnterAndExit();
-        return;
+    let bridgeID = (await prompt(`Enter bridge ID ${mode === 'host' ? '(default random): ' : ': '}`)).trim();
+    if (mode === 'host' && !bridgeID) bridgeID = generateRandomID();
+    if (mode === 'client' && !bridgeID) {
+        error('Bridge ID required in client mode.');
+        rl.close(); waitForEnterAndExit(); return;
+    }
+    bridgeID = bridgeID.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (bridgeID.length < 8 || bridgeID.length > 64) {
+        error('Bridge ID must be 8–64 characters.');
+        rl.close(); waitForEnterAndExit(); return;
     }
 
-    let protocol;
-    try {
-        protocol = await prompt(`Enter protocol [${mode == 'host' ? 'tcp|udp|both' : 'tcp|udp'}] (default is 'tcp'): `);
-        protocol = protocol.trim().toLowerCase() || 'tcp';
-        if (mode === 'host' && !['tcp', 'udp', 'both'].includes(protocol)) {
-            error("Invalid protocol. Please enter 'tcp', 'udp', or 'both'.");
-            rl.close();
-            waitForEnterAndExit();
-            return;
-        } else if (mode === 'client' && !['tcp', 'udp'].includes(protocol)) {
-            error("Invalid protocol. Please enter 'tcp' or 'udp'.");
-            rl.close();
-            waitForEnterAndExit();
-            return;
-        }
-    } catch (e) {
-        error('Error reading input: ' + e.message);
-        rl.close();
-        waitForEnterAndExit();
-        return;
+    let protocol = (await prompt(`Enter protocol [${mode === 'host' ? 'tcp|udp|both' : 'tcp|udp'}] (default tcp): `)).trim().toLowerCase() || 'tcp';
+    if (mode === 'host' && !['tcp', 'udp', 'both'].includes(protocol)) {
+        error("Invalid protocol."); rl.close(); waitForEnterAndExit(); return;
+    }
+    if (mode === 'client' && !['tcp', 'udp'].includes(protocol)) {
+        error("Invalid protocol."); rl.close(); waitForEnterAndExit(); return;
     }
 
-    let port;
-    try {
-        port = await prompt('Enter port '+(mode == 'host' ? '(default 8080): ' : '(default 5000): '));
-        port = port.trim() || (mode == 'host' ? '8080': '5000');
-        if (!/^\d+$/.test(port) || parseInt(port) < 1 || parseInt(port) > 65535) {
-            error('Invalid port. Please enter a number between 1 and 65535.');
-            rl.close();
-            waitForEnterAndExit();
-            return;
-        }
-    } catch (e) {
-        error('Error reading input: ' + e.message);
-        rl.close();
-        waitForEnterAndExit();
-        return;
+    let port = (await prompt(`Enter port ${mode === 'host' ? '(default 8080): ' : '(default 5000): '}`)).trim() || (mode === 'host' ? '8080' : '5000');
+    if (!/^\d+$/.test(port) || +port < 1 || +port > 65535) {
+        error('Invalid port. Must be 1–65535.');
+        rl.close(); waitForEnterAndExit(); return;
     }
 
-    let verbose;
-    try {
-        verbose = await prompt('Enable verbose logging? (yes/no, default is no): ');
-        verbose = verbose.trim().toLowerCase() === 'yes' ? '--verbose' : '';
-    } catch (e) {
-        error('Error reading input: ' + e.message);
-        rl.close();
-        waitForEnterAndExit();
-        return;
+    let verbose = (await prompt('Enable verbose logging? (yes/no, default no): ')).trim().toLowerCase() === 'yes';
+    let warnings = (await prompt('Show expected warnings? (yes/no, default no): ')).trim().toLowerCase() === 'yes';
+
+    // === Advanced Options ===
+    let useAdvanced = (await prompt('Use advanced options? (yes/no, default no): ')).trim().toLowerCase() === 'yes';
+    let secret, status, maxStreams, kbps, tcpRetries, tcpRetryDelay;
+    if (useAdvanced) {
+        secret = (await prompt('Enter secret passphrase (leave empty to disable): ')).trim();
+        status = (await prompt('Enter status server port (leave empty to disable): ')).trim();
+        maxStreams = (await prompt('Enter max concurrent streams (default 256): ')).trim() || '256';
+        kbps = (await prompt('Enter kbps throttle per stream (0=unlimited): ')).trim() || '0';
+        tcpRetries = (await prompt('Enter TCP connect retry attempts (default 5): ')).trim() || '5';
+        tcpRetryDelay = (await prompt('Enter TCP retry delay in ms (default 500): ')).trim() || '500';
     }
 
     rl.close();
 
-    info(`Starting nat-bridge in ${mode} mode with ID '${bridgeID}' on port ${port} using protocol '${protocol}'${verbose ? ' with verbose logging' : ''}.`);
+    info(`Starting nat-bridge in ${mode} mode with ID '${bridgeID}' on port ${port} using protocol '${protocol}'${verbose ? ' (verbose)' : ''}${warnings ? ' (warnings enabled)' : ''}${useAdvanced ? ' (advanced options enabled)' : ''}.`);
 
-    const args = [mode, bridgeID, '--port', port, '--protocol', protocol, verbose];
+    const args = [
+        mode,
+        bridgeID,
+        mode === 'host' ? '--expose' : '--listen', port,
+        '--protocol', protocol,
+    ];
+    if (verbose) args.push('--verbose');
+    if (warnings) args.push('--warnings');
+
+    // Add advanced flags if chosen
+    if (useAdvanced) {
+        if (secret) args.push('--secret', `"${secret}"`);
+        if (status) args.push('--status', status);
+        if (maxStreams) args.push('--max-streams', maxStreams);
+        if (kbps) args.push('--kbps', kbps);
+        if (tcpRetries) args.push('--tcp-retries', tcpRetries);
+        if (tcpRetryDelay) args.push('--tcp-retry-delay', tcpRetryDelay);
+    }
+
     try {
-        for (let i = 0; i < 7; i++) {
-            process.stdout.write('\x1b[1A');
-            process.stdout.write('\r\x1b[2K');
-        }
-        const child = spawnSync(exe, args, { stdio: 'inherit', shell: true });
-        if (child.error) throw child.error;
+        spawnSync(exe, args, { stdio: 'inherit', shell: true });
     } catch (e) {
         error('Failed to launch nat-bridge: ' + e.message);
         waitForEnterAndExit();
