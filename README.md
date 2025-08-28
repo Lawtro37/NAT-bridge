@@ -30,46 +30,85 @@ npm install
 ## Usage
 
 ```bash
-node main.js <host|client> <bridge-id> [options]
+nat-bridge <host|client> <bridge-id> [options]
 ```
 
 ### Options
 
-| Option                      | Description                                 | Default   |
-|-----------------------------|---------------------------------------------|-----------|
-| `-e`, `--expose <port>`     | Port to expose on host                      | 8080      |
-| `-l`, `--listen <port>`     | Port to listen on client                    | 5000      |
-| `-p`, `--protocol <type>`   | Protocol to tunnel: `tcp`, `udp`, `both`    | tcp       |
-| `-v`, `--verbose`           | Enable verbose logging                      |           |
-| `-h`, `--help`              | Show help                                   |           |
-| `-w`, `--warnings`          | shows expected warnings                     |           |
+| Option                        | Description                                 | Default   |
+|-------------------------------|---------------------------------------------|-----------|
+| `-e`, `--expose <port>`       | Port to expose on host                      | 8080      |
+| `-l`, `--listen <port>`       | Port to listen on client                    | 5000      |
+| `-p`, `--protocol <type>`     | Protocol to tunnel: `tcp`, `udp`, `both`    | tcp       |
+| `-v`, `--verbose`             | Enable verbose logging                      |           |
+| `-h`, `--help`                | Show help                                   |           |
+|       `--json                 | Structured JSON logs (disables spinner)     |           |
+|       `--secret <pass>`       | Enable mutual auth (HMAC challenge)         |           |
+|       `--status <port>`       | Start status server (JSON)                  |           |
+|       `--max-streams <n>`     | Limit concurrent streams                    | 256       |
+|       `--kbps <n>`            | Simple throttle per stream (0=unlimited)    | unlimited |
+|       `--tcp-retries <n>`     | TCP connect retry attempts                  | 5         |
+|       `--tcp-retry-delay <ms>`| Delay between retries (in miliseconds)      | 500ms     |
 
 ---
 
 ### Examples
 
-#### Expose a local TCP+UDP service on port 3000
-
+#### Web Server Access
 ```bash
-node main.js host mybridge --expose 3000 --protocol both
+# Host: Share your local web server (localhost:3000) 
+nat-bridge host webserver --expose 3000 --protocol tcp --verbose
+
+# Client: Access the remote web server on your local port 8080
+nat-bridge client webserver --listen 8080 --protocol tcp
+# Now visit http://localhost:8080 to access the remote server
 ```
 
-#### Connect as a client and listen on port 1234 for UDP
-
+#### Game Server with Authentication
 ```bash
-node main.js client mybridge --listen 1234 --protocol udp
+# Host: Expose Minecraft server with security
+nat-bridge host minecraft --expose 25565 --protocol both --secret "gamenight2024"
+
+# Client: Connect to the game server
+nat-bridge client minecraft --listen 25565 --protocol tcp --secret "gamenight2024"
+# Connect your Minecraft client to localhost:25565
 ```
 
-#### Expose a TCP-only service on port 8081
-
+#### Database Tunneling
 ```bash
-node main.js host mybridge2 --expose 8081 --protocol tcp
+# Host: Expose PostgreSQL database with monitoring
+nat-bridge host database --expose 5432 --protocol tcp --status 9999 --max-streams 5
+
+# Client: Connect to database through tunnel
+nat-bridge client database --listen 5432 --protocol tcp
+# Connect your database client to localhost:5432
+# Check connection status at http://localhost:9999/status
 ```
 
-#### Connect as a client and listen on port 9000 for TCP
-
+#### Home Media Server
 ```bash
-node main.js client mybridge2 --listen 9000 --protocol tcp
+# Host: Share Plex/Jellyfin server with bandwidth limiting
+nat-bridge host mediaserver --expose 32400 --protocol tcp --kbps 5000
+
+# Client: Access media server remotely
+nat-bridge client mediaserver --listen 32400 --protocol tcp
+```
+
+#### Configuration File Example
+```bash
+# Create config.json:
+{
+  "mode": "host",
+  "bridgeId": "myservice",
+  "exposedPort": 8080,
+  "protocol": "tcp",
+  "secret": "mysecret123",
+  "verbose": true,
+  "maxStreams": 10
+}
+
+# Use the config file:
+nat-bridge config ./config.json
 ```
 
 ---
@@ -87,7 +126,7 @@ node main.js client mybridge2 --listen 9000 --protocol tcp
 
 - Node.js v14+
 - [Hyperswarm](https://github.com/hyperswarm/hyperswarm)
-- [multiplex](https://github.com/maxogden/multiplex)
+- [multiplex](https://github.com/maxogden/multiplex) 
 - [pump](https://github.com/mafintosh/pump)
 
 Install dependencies with:
@@ -121,9 +160,8 @@ npm install hyperswarm multiplex pump
 ---
 
 ## Notes
-- If you get the warning `[WARN] [CONFLICT] Another host attempted to connect. Ignoring.` you may want to change your bridge ID.
-- The releases are released as executable files.
-- The launcher only works for realeases and is bundeled in the zip file with the `nat-tunnel.exe`.
+- the warning `[WARN] Socket error: connection reset by peer` is common and often harmless.
+- if you get the warning `[WARN] [CONFLICT] Another host attempted to connect. Ignoring.` you may want to change your bridge ID.
 
 ---
 
@@ -147,6 +185,6 @@ Any contributions that help make NAT-bridge more robust, secure, or user-friendl
 
 #### made by Lawtro
 
-##### GPL-3.0 license
+##### MIT Licence
 
 ##
