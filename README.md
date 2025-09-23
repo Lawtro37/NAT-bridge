@@ -42,7 +42,7 @@ nat-bridge <host|client> <bridge-id> [options]
 | `-p`, `--protocol <type>`     | Protocol to tunnel: `tcp`, `udp`, `both`    | tcp       |
 | `-v`, `--verbose`             | Enable verbose logging                      |           |
 | `-h`, `--help`                | Show help                                   |           |
-|       `--json                 | Structured JSON logs (disables spinner)     |           |
+|       `--json`                | Structured JSON logs (disables spinner)     |           |
 |       `--secret <pass>`       | Enable mutual auth (HMAC challenge)         |           |
 |       `--status <port>`       | Start status server (JSON)                  |           |
 |       `--max-streams <n>`     | Limit concurrent streams                    | 256       |
@@ -185,6 +185,6 @@ Any contributions that help make NAT-bridge more robust, secure, or user-friendl
 
 #### made by Lawtro
 
-##### MIT Licence
+##### GPL-3.0 license
 
 ##
