@@ -1,3 +1,5 @@
+![NAT-Bridge Logo](https://discord-host.lawtrostudios.com/9e868e59-e4f0-4d59-adfb-a004db12bb94)
+
 # NAT-bridge
 
 A sweet and simple single command Node.js CLI tool for tunneling TCP and UDP traffic over a peer-to-peer (P2P) network using [Hyperswarm](https://github.com/hyperswarm/hyperswarm). NAT-bridge allows you to expose local services to remote clients, bypassing NAT/firewall restrictions (no need for port fowarding).
