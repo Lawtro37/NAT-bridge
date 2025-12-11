@@ -1,7 +1,4 @@
 ![NAT-Bridge Logo](https://discord-host.lawtrostudios.com/9e868e59-e4f0-4d59-adfb-a004db12bb94)
-<div style="text-align: center; width: 255; height: 255;">
-  <img src="https://discord-host.lawtrostudios.com/9e868e59-e4f0-4d59-adfb-a004db12bb94" alt="NAT-Bridge Logo">
-</div>
 
 # NAT-bridge
 
