@@ -69,10 +69,10 @@ nat-bridge client webserver --listen 8080 --protocol tcp
 #### Game Server with Authentication
 ```bash
 # Host: Expose Minecraft server with security
-nat-bridge host minecraft --expose 25565 --protocol both --secret "gamenight2024"
+nat-bridge host minecraft --expose 25565 --protocol tcp --secret "password123"
 
 # Client: Connect to the game server
-nat-bridge client minecraft --listen 25565 --protocol tcp --secret "gamenight2024"
+nat-bridge client minecraft --listen 25565 --protocol tcp --secret "password123"
 # Connect your Minecraft client to localhost:25565
 ```
 
