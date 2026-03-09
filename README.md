@@ -1,4 +1,4 @@
-![NAT-Bridge Logo](https://discord-host.lawtrostudios.com/9e868e59-e4f0-4d59-adfb-a004db12bb94)
+![NAT-Bridge Logo](https://github.com/Lawtro37/NAT-bridge/blob/main/NAT-bridge-icon.png)
 
 # NAT-bridge
 
