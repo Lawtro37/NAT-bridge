@@ -38,10 +38,10 @@ let protocol = (parseArgValue('protocol', 'p', 'tcp') || '').toLowerCase();
 let VERBOSE = parseArgFlag('verbose', 'v');
 let EXPECTEDWARNINGS = parseArgFlag('warnings', 'w');
 let JSON_MODE = parseArgFlag('json', null);
-let SECRET = parseArgValue('secret', 's', '');          // optional shared secret
+let SECRET = parseArgValue('secret', 's', '');
 let STATUS_PORT = parseInt(parseArgValue('status', null, '0'), 10) || 0;
-let MAX_STREAMS = parseInt(parseArgValue('max-streams', null, '256'), 10); // per process
-let KBPS = parseInt(parseArgValue('kbps', null, '0'), 10); // 0 = unlimited
+let MAX_STREAMS = parseInt(parseArgValue('max-streams', null, '256'), 10);
+let KBPS = parseInt(parseArgValue('kbps', null, '0'), 10);
 let HANDSHAKE_TIMEOUT_MS = 10000;
 let TCP_CONNECT_RETRIES = parseInt(parseArgValue('tcp-retries', null, '5'), 10);
 let TCP_RETRY_DELAY_MS = parseInt(parseArgValue('tcp-retry-delay', null, '500'), 10);
@@ -391,7 +391,6 @@ swarm.on('connection', (socket) => {
           stage = 1;
           socket.write(JSON.stringify({ protocol, clientChal }) + '\n');
         } else {
-          // fallback: if host doesn't do challenge, go ahead
           stage = 1;
           socket.write(JSON.stringify({ protocol, clientChal }) + '\n');
         }
@@ -692,17 +691,14 @@ function gracefulExit(code = 0) {
   info('Shutting down gracefully...');
   exiting = true;
 
-  // 1. Stop TCP server
   if (tcpServer) {
     try { tcpServer.close(() => info('TCP server closed')); } catch {}
   }
 
-  // 2. Stop UDP socket
   if (udpSocket) {
     try { udpSocket.close(() => info('UDP socket closed')); } catch {}
   }
 
-  // 3. Close all active streams
   for (const stream of activeStreams) {
     try {
       if (!stream.destroyed) {
@@ -713,7 +709,6 @@ function gracefulExit(code = 0) {
   }
   activeStreams.clear();
 
-  // 4. Destroy swarm with a fallback timeout
   try {
     let swarmClosed = false;
     swarm.destroy(() => {
@@ -722,7 +717,6 @@ function gracefulExit(code = 0) {
       process.exit(code);
     });
 
-    // Force exit after 3s in case swarm.destroy hangs
     setTimeout(() => {
       if (!swarmClosed) {
         warn('Swarm close timeout reached, forcing exit...');
@@ -743,3 +737,4 @@ process.on('uncaughtException', (err) => {
   gracefulExit(1);
 });
 process.on('exit', (code) => { if (!exiting) gracefulExit(code); });
+
