@@ -18,24 +18,39 @@ try {
 }
 
 function findNatBridgeExecutable() {
-    // Search common locations for the `nat-bridge` binary, then fallback to PATH.
     const isWin = os.platform() === "win32";
     const exeName = isWin ? "nat-bridge.exe" : "nat-bridge";
 
-    const localCandidates = [
+    // Candidate locations to search for the native helper. When the app is
+    // packaged the running exe's directory is the most likely location.
+    const candidates = [
         path.resolve(__dirname, exeName),
         path.resolve(__dirname, "..", exeName),
+        // also check the parent of the parent (useful when launcher sits in a nested folder)
+        path.resolve(__dirname, "..", "..", exeName),
+        path.resolve(process.cwd(), exeName),
+        path.resolve(process.cwd(), 'dist', exeName),
+        path.join(path.dirname(process.execPath || ''), exeName),
+        // if nat-bridge is placed next to the app bundle (one level up)
+        path.join(path.dirname(process.execPath || ''), '..', exeName),
+        path.join(process.resourcesPath || '', exeName),
+        path.join(process.resourcesPath || '', '..', exeName),
     ];
 
-    for (const candidate of localCandidates) {
-        if (fs.existsSync(candidate)) return candidate;
+    for (const candidate of candidates) {
+        try {
+            if (candidate && fs.existsSync(candidate)) return candidate;
+        } catch (_) {}
     }
 
+    // Fallback: search PATH
     const cmd = isWin ? "where" : "which";
-    const result = spawnSync(cmd, [exeName], { encoding: "utf-8" });
-    if (result.status === 0 && result.stdout.trim()) {
-        return result.stdout.trim().split(/\r?\n/)[0];
-    }
+    try {
+        const result = spawnSync(cmd, [exeName], { encoding: "utf-8" });
+        if (result.status === 0 && result.stdout.trim()) {
+            return result.stdout.trim().split(/\r?\n/)[0];
+        }
+    } catch (_) {}
 
     return null;
 }
