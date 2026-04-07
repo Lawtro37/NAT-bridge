@@ -1,0 +1,172 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f0f0f0;
+  --fg: #222;
+  --control-bg: #fff;
+  --control-border: #bcbcbc;
+  --panel-bg: #fafafa;
+  --term-bg: #ffffff;
+  --term-fg: #111;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1f1f1f;
+    --fg: #e8e8e8;
+    --control-bg: #2a2a2a;
+    --control-border: #555;
+    --panel-bg: #2a2a2a;
+    --term-bg: #111;
+    --term-fg: #ddd;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.window {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+label {
+  font-size: 13px;
+}
+
+.field-label {
+  width: 110px;
+  text-align: right;
+}
+
+.check-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.check-item input {
+  margin: 0;
+}
+
+.check-item span {
+  line-height: 1;
+}
+
+input,
+select,
+button,
+textarea,
+fieldset {
+  font-family: inherit;
+  font-size: 13px;
+}
+
+input,
+select,
+button {
+  height: 28px;
+  border: 1px solid var(--control-border);
+  border-radius: 2px;
+  background: var(--control-bg);
+  color: var(--fg);
+}
+
+input,
+select {
+  padding: 3px 6px;
+}
+
+button {
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+#configFile {
+  width: 420px;
+}
+
+#bridgeId {
+  width: 280px;
+}
+
+#port,
+#status,
+#maxStreams,
+#kbps,
+#tcpRetries,
+#tcpRetryDelay {
+  width: 110px;
+}
+
+#advancedBtn {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+}
+
+.advanced {
+  border: 1px solid var(--control-border);
+  padding: 8px;
+  margin: 0 0 8px;
+  width: 90%;
+  background: var(--panel-bg);
+}
+
+.hidden {
+  display: none;
+}
+
+.actions {
+  margin-top: 2px;
+}
+
+#statusLabel {
+  margin-left: 8px;
+  font-weight: 600;
+}
+
+#outputWrap {
+  flex: 1;
+  min-height: 180px;
+  border: 1px solid var(--control-border);
+  background: var(--term-bg);
+  box-sizing: border-box;
+}
+
+#output {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 0;
+  background: var(--term-bg);
+  color: var(--term-fg);
+  padding: 8px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: "Cascadia Mono", Consolas, "Lucida Console", "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.35;
+}

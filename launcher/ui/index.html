@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NAT-bridge Launcher</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="window">
+    <div class="title">NAT-bridge Launcher</div>
+
+    <div class="row">
+      <label class="check-item"><input type="checkbox" id="loadFromFile" /> <span>Load from configuration file</span></label>
+    </div>
+
+    <div class="row" id="configRow">
+      <label class="field-label" for="configFile">Config file</label>
+      <input id="configFile" type="text" />
+      <button id="browseBtn" type="button">Browse...</button>
+    </div>
+
+    <div id="interactiveSection">
+      <div class="row">
+        <label class="field-label" for="mode">Mode</label>
+        <select id="mode"><option>host</option><option>client</option></select>
+        <label class="field-label" for="bridgeId">Bridge ID</label>
+        <input id="bridgeId" type="text" />
+      </div>
+
+      <div class="row">
+        <label class="field-label" for="protocol">Protocol</label>
+        <select id="protocol"><option>tcp</option><option>udp</option><option>both</option></select>
+        <label class="field-label" for="port">Port</label>
+        <input id="port" type="number" value="8080" min="1" max="65535" />
+      </div>
+
+      <div class="row">
+        <label class="check-item"><input type="checkbox" id="verbose" /> <span>Verbose logging</span></label>
+        <label class="check-item"><input type="checkbox" id="warnings" /> <span>Show expected warnings</span></label>
+        <label class="check-item"><input type="checkbox" id="openCmd" /> <span>Open Command Prompt output</span></label>
+        <label class="field-label" for="advancedSelect">Advanced options</label>
+        <select id="advancedSelect">
+          <option value="hide">Hidden</option>
+          <option value="show">Shown</option>
+        </select>
+      </div>
+
+      <fieldset id="advancedFieldset" class="advanced hidden">
+        <legend>Advanced options</legend>
+        <div class="row">
+          <label class="field-label" for="secret">Secret</label>
+          <input id="secret" type="text" />
+          <label class="field-label" for="status">Status port</label>
+          <input id="status" type="number" min="1" max="65535" />
+        </div>
+        <div class="row">
+          <label class="field-label" for="maxStreams">Max streams</label>
+          <input id="maxStreams" type="number" value="256" min="1" />
+          <label class="field-label" for="kbps">Kbps throttle</label>
+          <input id="kbps" type="number" value="0" min="0" />
+        </div>
+        <div class="row">
+          <label class="field-label" for="tcpRetries">TCP retries</label>
+          <input id="tcpRetries" type="number" value="5" min="0" />
+          <label class="field-label" for="tcpRetryDelay">TCP retry delay (ms)</label>
+          <input id="tcpRetryDelay" type="number" value="500" min="0" />
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="row actions">
+      <button id="runBtn" type="button">Start</button>
+      <button id="clearBtn" type="button">Clear log</button>
+      <span id="statusLabel">Status: idle</span>
+    </div>
+
+    <div id="outputWrap">
+      <div id="output" role="log" aria-live="polite" aria-label="Process output"></div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
