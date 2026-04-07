@@ -1,4 +1,4 @@
-![NAT-Bridge Logo](https://github.com/Lawtro37/NAT-bridge/blob/main/NAT-bridge-icon.png)
+![NAT-Bridge Logo](https://raw.githubusercontent.com/Lawtro37/NAT-bridge/refs/heads/dev/icons/NAT-bridge-icon-8.png)
 
 # NAT-bridge
 
@@ -26,6 +26,14 @@ A sweet and simple single command Node.js CLI tool for tunneling TCP and UDP tra
 ```bash
 npm install
 ```
+
+## GUI Launcher
+
+```bash
+npm run launcher
+```
+
+Opens a simple Electron desktop launcher (Windows-style UI) where you can configure host/client mode, protocol, ports, advanced options, and launch `nat-bridge` with live process logs.
 
 ---
 
@@ -69,10 +77,10 @@ nat-bridge client webserver --listen 8080 --protocol tcp
 #### Game Server with Authentication
 ```bash
 # Host: Expose Minecraft server with security
-nat-bridge host minecraft --expose 25565 --protocol tcp --secret "password123"
+nat-bridge host minecraft --expose 25565 --protocol both --secret "gamenight2024"
 
 # Client: Connect to the game server
-nat-bridge client minecraft --listen 25565 --protocol tcp --secret "password123"
+nat-bridge client minecraft --listen 25565 --protocol tcp --secret "gamenight2024"
 # Connect your Minecraft client to localhost:25565
 ```
 

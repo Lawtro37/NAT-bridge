@@ -2,9 +2,35 @@
   "name": "nat-bridge",
   "version": "1.0.0",
   "bin": "main.js",
-  "scripts": {},
+  "scripts": {
+    "analyze": "fallow",
+    "launcher": "electron launcher/nat-bridge-launcher.js",
+    "build:exe": "pkg . --targets node18-win-x64 --output dist/nat-bridge.exe",
+    "icon:exe": "npx resedit dist/nat-bridge.exe dist/nat-bridge-iconed.exe --icon 1,icons/icon.ico && node -e \"const fs=require('fs');fs.renameSync('dist/nat-bridge-iconed.exe','dist/nat-bridge.exe')\"",
+    "icon:exe-safe": "node scripts/icon_exe_safe.js",
+    "copy-native": "node -e \"const fs=require('fs'), path=require('path'); const dst=path.join('dist','nat-bridge-native.exe'); if (fs.existsSync('nat-bridge.exe')) fs.copyFileSync('nat-bridge.exe', dst);\"",
+    "build:launcher": "npx electron-packager launcher \"NAT-bridge Launcher\" --platform=win32 --arch=x64 --out build_temp --overwrite --icon=icons/icon.ico --prune=false",
+    "package:all": "npm run build:exe && npm run icon:exe-safe && npm run build:launcher && node scripts/assemble_release.js"
+  },
+  "pkg": {
+    "assets": [
+      "launcher/**",
+      "nat-bridge.exe"
+    ]
+  },
+  "devDependencies": {
+    "electron-packager": "^17.1.1"
+  },
   "dependencies": {
+    "electron": "^41.1.1",
     "hyperswarm": "^4.11.7",
-    "multiplex": "^6.7.0"
+    "multiplex": "^6.7.0",
+    "pump": "^3.0.3"
+  },
+  "devDependencies": {
+    "fallow": "^2.15.0",
+    "pkg": "^5.8.1",
+    "rcedit": "^5.0.2",
+    "resedit-cli": "^3.0.1"
   }
 }
