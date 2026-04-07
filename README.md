@@ -1,4 +1,4 @@
-![NAT-Bridge Logo](https://raw.githubusercontent.com/Lawtro37/NAT-bridge/refs/heads/dev/icons/NAT-bridge-icon-9.png)
+![NAT-Bridge Logo](https://raw.githubusercontent.com/Lawtro37/NAT-bridge/refs/heads/dev/icons/NAT-bridge-icon-8.png)
 
 # NAT-bridge
 
