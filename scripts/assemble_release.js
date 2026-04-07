@@ -33,8 +33,13 @@ function safeCp(src, dst) {
 }
 
 const outBase = path.resolve('release', 'nat-bridge-win32-x64');
-safeRm(outBase);
-fs.mkdirSync(outBase, { recursive: true });
+try {
+  safeRm(outBase);
+  fs.mkdirSync(outBase, { recursive: true });
+} catch (err) {
+  console.warn('Warning: could not remove/create release folder, continuing. Error:', err && err.message);
+  fs.mkdirSync(outBase, { recursive: true });
+}
 
 // 1) copy the packaged nat-bridge exe (iconed)
 const packagedExe = path.resolve('dist', 'nat-bridge.exe');
@@ -43,14 +48,7 @@ if (fs.existsSync(packagedExe)) {
   console.log('Copied nat-bridge.exe');
 } else console.warn('packaged nat-bridge.exe not found');
 
-// 2) copy README from build/readme.txt if present
-const readmeSrc = path.resolve('build', 'readme.txt');
-if (fs.existsSync(readmeSrc)) {
-  fs.copyFileSync(readmeSrc, path.join(outBase, 'readme.txt'));
-  console.log('Copied readme.txt');
-} else console.warn('build/readme.txt not found');
-
-// 3) copy example configurations (folder named "configuration examples" or "configuration examples/")
+// 2) copy example configurations (folder named "configuration examples" or "configuration examples/")
 const examplesSrc1 = path.resolve('configuration examples');
 const examplesSrc2 = path.resolve('configuration examples');
 if (fs.existsSync(examplesSrc1)) {
@@ -61,7 +59,7 @@ if (fs.existsSync(examplesSrc1)) {
   console.log('Copied example-configurations');
 } else console.warn('Example configurations folder not found');
 
-// 4) copy the packaged launcher produced by electron-packager
+// 3) copy the packaged launcher produced by electron-packager
 const buildTemp = path.resolve('build_temp');
 if (fs.existsSync(buildTemp)) {
   const items = fs.readdirSync(buildTemp);
