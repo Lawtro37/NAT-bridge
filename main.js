@@ -11,7 +11,7 @@ const http = require('http');
 const pump = require('pump');
 const { Transform } = require('stream');
 
-const VERSION = '1.0.4';
+const VERSION = '1.1.0';
 const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/nat-bridge/main/VERSION';
 
 // ------------------------- CLI / Helpers -------------------------
