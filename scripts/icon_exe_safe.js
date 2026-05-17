@@ -1,47 +1,66 @@
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const os = require('os');
+const { spawnSync } = require('child_process');
 
-const exePath = path.resolve('dist', 'nat-bridge.exe');
-const iconPath = path.resolve('icons', 'icon.ico');
-const rceditBin = path.resolve('node_modules', 'rcedit', 'bin', 'rcedit.exe');
+const projectRoot = path.resolve(__dirname, '..');
+const exePath = path.join(projectRoot, 'nat-bridge.exe');
+const distExePath = path.join(projectRoot, 'dist', 'nat-bridge.exe');
+const iconPath = path.join(projectRoot, 'icons', 'icon.ico');
+const rceditBin = path.join(projectRoot, 'node_modules', 'rcedit', 'bin', 'rcedit.exe');
+const caxaStubPath = path.join(projectRoot, 'node_modules', '@appthreat', 'caxa', 'stubs', `stub--${process.platform}--${process.arch}`);
 
-if (!fs.existsSync(exePath)) {
-  console.error('Executable not found at', exePath);
-  process.exit(2);
-}
-if (!fs.existsSync(iconPath)) {
-  console.error('Icon not found at', iconPath);
-  process.exit(2);
-}
-if (!fs.existsSync(rceditBin)) {
-  console.error('rcedit binary not found at', rceditBin);
+function fail(message) {
+  console.error(message);
   process.exit(2);
 }
 
-const backup = exePath + '.bak';
+function runCommand(command, args, options = {}) {
+  const proc = spawnSync(command, args, {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+    ...options,
+  });
+
+  if (proc.error) {
+    throw proc.error;
+  }
+  if (proc.status !== 0) {
+    throw new Error(`${command} exited with code ${proc.status}`);
+  }
+}
+
+if (!fs.existsSync(iconPath)) fail(`Icon not found at ${iconPath}`);
+if (!fs.existsSync(rceditBin)) fail(`rcedit binary not found at ${rceditBin}`);
+if (!fs.existsSync(caxaStubPath)) fail(`caxa stub not found at ${caxaStubPath}`);
+
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nat-bridge-caxa-'));
+const tempStubPath = path.join(tempDir, 'caxa-stub.exe');
+
 try {
-  fs.copyFileSync(exePath, backup);
-  console.log('Backup created:', backup);
+  fs.copyFileSync(caxaStubPath, tempStubPath);
+  runCommand(rceditBin, [tempStubPath, '--set-icon', iconPath], { shell: false });
 
-  const args = [exePath, '--set-icon', iconPath];
-  const proc = spawn(rceditBin, args, { stdio: 'inherit' });
-  proc.on('error', (err) => {
-    console.error('Failed to start rcedit:', err && err.message);
-    try { fs.copyFileSync(backup, exePath); } catch (e) {}
-    process.exit(1);
-  });
-  proc.on('exit', (code) => {
-    if (code !== 0) {
-      console.error('rcedit exited with code', code);
-      try { fs.copyFileSync(backup, exePath); } catch (e) {}
-      process.exit(1);
-    }
-    try { fs.unlinkSync(backup); } catch (e) {}
-    console.log('Icon applied to', exePath);
-  });
+  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  runCommand(npxCmd, [
+    'caxa',
+    '--input', '.',
+    '--output', 'nat-bridge.exe',
+    '--stub', tempStubPath,
+    '--',
+    '{{caxa}}/node_modules/.bin/node',
+    '{{caxa}}/main.js'
+  ]);
+
+  fs.mkdirSync(path.dirname(distExePath), { recursive: true });
+  fs.copyFileSync(exePath, distExePath);
+  console.log('Copied nat-bridge.exe to dist/nat-bridge.exe');
+  console.log('Built nat-bridge.exe with the icon applied to the caxa stub.');
 } catch (err) {
-  console.error('Failed to apply icon:', err && err.message);
-  try { if (fs.existsSync(backup)) fs.copyFileSync(backup, exePath); } catch (e) {}
+  console.error('Failed to build iconed EXE safely:', err && err.message);
   process.exit(1);
+} finally {
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  } catch (err) {}
 }

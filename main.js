@@ -11,7 +11,7 @@ const http = require('http');
 const pump = require('pump');
 const { Transform } = require('stream');
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/nat-bridge/main/VERSION';
 
 // ------------------------- CLI / Helpers -------------------------
@@ -38,6 +38,7 @@ let protocol = (parseArgValue('protocol', 'p', 'tcp') || '').toLowerCase();
 let VERBOSE = parseArgFlag('verbose', 'v');
 let EXPECTEDWARNINGS = parseArgFlag('warnings', 'w');
 let JSON_MODE = parseArgFlag('json', null);
+let NO_TUI = parseArgFlag('no-tui', null);
 let SECRET = parseArgValue('secret', 's', '');          // optional shared secret
 let STATUS_PORT = parseInt(parseArgValue('status', null, '0'), 10) || 0;
 let MAX_STREAMS = parseInt(parseArgValue('max-streams', null, '256'), 10); // per process
@@ -45,6 +46,8 @@ let KBPS = parseInt(parseArgValue('kbps', null, '0'), 10); // 0 = unlimited
 let HANDSHAKE_TIMEOUT_MS = 10000;
 let TCP_CONNECT_RETRIES = parseInt(parseArgValue('tcp-retries', null, '5'), 10);
 let TCP_RETRY_DELAY_MS = parseInt(parseArgValue('tcp-retry-delay', null, '500'), 10);
+let TUI_ENABLED = !NO_TUI && !JSON_MODE && process.stdout.isTTY;
+let CLOSE_ACTIVE_STREAM_TIMEOUT_MS = 5000;
 
 function printHelpAndExit() {
   console.log(`
@@ -68,6 +71,7 @@ Options:
       --kbps <n>                Simple throttle per stream (0=unlimited)
       --tcp-retries <n>         TCP connect retry attempts (default: 5)
       --tcp-retry-delay <ms>    Delay between retries (default: 500)
+        --no-tui                  Disable the terminal UI
   -h, --help                    Show this help
 
 Examples:
@@ -121,29 +125,262 @@ function color(text, c) {
   if (JSON_MODE || !process.stdout.isTTY) return text;
   return `\x1b[${c}m${text}\x1b[0m`;
 }
+function formatBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+// ------------------------- TUI -------------------------
+
+let tui = null;
+let tuiScreen = null;
+let tuiHeader = null;
+let tuiStatus = null;
+let tuiMetrics = null;
+let tuiLog = null;
+let tuiFooter = null;
+let tuiLogPaused = false;
+let tuiLogBuffer = [];
+let tuiPendingLogBuffer = [];
+let tuiTick = null;
+let tuiSpinnerMessage = '';
+let tuiSpinnerIndex = 0;
+let tuiStatusLine = '';
+const tuiSpinnerChars = ['|', '/', '-', '\\'];
+const crashLogBuffer = [];
+const crashLogLimit = 400;
+let lastRateTs = Date.now();
+let lastRateUp = 0;
+let lastRateDown = 0;
+let rateUpBps = 0;
+let rateDownBps = 0;
+
+function pushCrashLog(level, msg) {
+  const line = `[${String(level).toUpperCase()}] ${String(msg ?? '')}`;
+  crashLogBuffer.push(line);
+  if (crashLogBuffer.length > crashLogLimit) crashLogBuffer.shift();
+}
+
+function formatTuiLog(level, msg) {
+  const lvl = String(level || '').toLowerCase();
+  const label = String(level || 'info').toUpperCase();
+  const text = String(msg ?? '');
+  const colorByLevel = {
+    info: 'cyan-fg',
+    warn: 'yellow-fg',
+    error: 'red-fg',
+    success: 'green-fg',
+    verbose: 'gray-fg'
+  };
+  const color = colorByLevel[lvl] || 'white-fg';
+  return `{${color}}[${label}]{/${color}} ${text}`;
+}
+
+function emitTui(level, msg) {
+  if (!TUI_ENABLED) return false;
+  const line = formatTuiLog(level, msg);
+  if (!tuiLog) {
+    tuiPendingLogBuffer.push(line);
+    if (tuiPendingLogBuffer.length > 2000) tuiPendingLogBuffer.shift();
+    return true;
+  }
+  if (tuiLogPaused) {
+    tuiLogBuffer.push(line);
+    if (tuiLogBuffer.length > 2000) tuiLogBuffer.shift();
+    return true;
+  }
+  tuiLog.log(line);
+  return true;
+}
+
+function initTui() {
+  if (!TUI_ENABLED) return;
+  let blessed;
+  try {
+    blessed = require('blessed');
+  } catch (e) {
+    TUI_ENABLED = false;
+    warn('Failed to load blessed; falling back to plain console.');
+    return;
+  }
+
+  tuiScreen = blessed.screen({ smartCSR: true, title: `NAT-bridge ${VERSION}` });
+  tuiScreen.enableMouse();
+  tuiHeader = blessed.box({ top: 0, left: 0, height: 1, width: '100%', style: { fg: 'white', bg: 'blue' }, tags: true });
+  tuiStatus = blessed.box({ label: 'Status', border: 'line', style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } }, tags: true });
+  tuiMetrics = blessed.box({ label: 'Metrics', border: 'line', style: { fg: 'white', bg: 'black', border: { fg: 'cyan' } }, tags: true });
+  tuiLog = blessed.log({ label: 'Logs', border: 'line', style: { fg: 'white', bg: 'black', border: { fg: 'green' } }, scrollback: 2000, tags: true, keys: true, mouse: true });
+  tuiFooter = blessed.box({ bottom: 0, left: 0, height: 1, width: '100%', style: { fg: 'white', bg: 'gray' }, tags: true });
+
+  tuiScreen.append(tuiHeader);
+  tuiScreen.append(tuiStatus);
+  tuiScreen.append(tuiMetrics);
+  tuiScreen.append(tuiLog);
+  tuiScreen.append(tuiFooter);
+
+  tuiLog.on('click', () => tuiLog.focus());
+  tuiLog.on('wheeldown', () => { tuiLog.scroll(1); tuiScreen.render(); });
+  tuiLog.on('wheelup', () => { tuiLog.scroll(-1); tuiScreen.render(); });
+
+  function relayout() {
+    const rows = tuiScreen.rows || 24;
+    const cols = tuiScreen.cols || 80;
+    const headerH = 1;
+    const footerH = 1;
+    const bodyTop = headerH;
+    const bodyH = Math.max(6, rows - headerH - footerH);
+    const leftW = Math.max(20, Math.floor(cols * 0.20));
+    const rightW = Math.max(24, cols - leftW);
+
+    tuiHeader.top = 0;
+    tuiHeader.left = 0;
+    tuiHeader.width = cols;
+    tuiHeader.height = headerH;
+
+    tuiFooter.top = rows - footerH;
+    tuiFooter.left = 0;
+    tuiFooter.width = cols;
+    tuiFooter.height = footerH;
+
+    tuiStatus.top = bodyTop;
+    tuiStatus.left = 0;
+    tuiStatus.width = leftW;
+    tuiStatus.height = bodyH;
+
+    const metricsH = Math.max(5, Math.floor(bodyH * 0.35));
+    tuiMetrics.top = bodyTop;
+    tuiMetrics.left = leftW;
+    tuiMetrics.width = rightW;
+    tuiMetrics.height = metricsH;
+
+    tuiLog.top = bodyTop + metricsH;
+    tuiLog.left = leftW;
+    tuiLog.width = rightW;
+    tuiLog.height = Math.max(5, bodyH - metricsH);
+
+    tuiScreen.render();
+  }
+
+  function updateHeader() {
+    tuiHeader.setContent(` {bold}{white-fg}NAT-bridge{/white-fg}{/bold}  {yellow-fg}Mode:{/yellow-fg} ${mode}  {yellow-fg}Bridge:{/yellow-fg} ${bridgeId}  {yellow-fg}Protocol:{/yellow-fg} ${protocol}`);
+  }
+
+  function updateFooter() {
+    const pauseLabel = tuiLogPaused ? 'resume' : 'pause';
+    let spinner = '';
+    if (tuiSpinnerMessage) {
+      const ch = tuiSpinnerChars[tuiSpinnerIndex++ % tuiSpinnerChars.length];
+      spinner = `{yellow-fg}${tuiSpinnerMessage} ${ch}{/yellow-fg}`;
+    }
+    const status = tuiStatusLine ? `{green-fg}${tuiStatusLine}{/green-fg}` : '';
+    tuiFooter.setContent(` ${spinner} ${status} {white-fg}|{/white-fg} {cyan-fg}q{/cyan-fg}: quit | {cyan-fg}c{/cyan-fg}: clear logs | {cyan-fg}p{/cyan-fg}: ${pauseLabel} logs | {cyan-fg}arrows/pgup/pgdn{/cyan-fg} to scroll`);
+  }
+
+  function updatePanels() {
+    const uptimeSec = Math.floor((Date.now() - metrics.startTs) / 1000);
+    const now = Date.now();
+    const dt = Math.max(1, now - lastRateTs);
+    const upDelta = metrics.bytesUp - lastRateUp;
+    const downDelta = metrics.bytesDown - lastRateDown;
+    rateUpBps = Math.max(0, Math.floor((upDelta * 1000) / dt));
+    rateDownBps = Math.max(0, Math.floor((downDelta * 1000) / dt));
+    lastRateTs = now;
+    lastRateUp = metrics.bytesUp;
+    lastRateDown = metrics.bytesDown;
+    const statusLines = [
+      `{yellow-fg}Connected:{/yellow-fg} ${connectedToHost ? '{green-fg}yes{/green-fg}' : '{red-fg}no{/red-fg}'}`,
+      `{yellow-fg}P2P connections:{/yellow-fg} ${metrics.p2pConnections}`,
+      protocol === "both" || protocol === "tcp" ? `{yellow-fg}TCP streams:{/yellow-fg} ${metrics.tcpStreams}` : null,
+      protocol === "both" || protocol === "udp" ? `{yellow-fg}UDP streams:{/yellow-fg} ${metrics.udpStreams}` : null,
+      `{yellow-fg}Active streams:{/yellow-fg} ${activeStreams.size}`,
+      `{yellow-fg}Last peer:{/yellow-fg} ${metrics.lastPeer || 'n/a'}`,
+      mode === "client" ? `{yellow-fg}Listen:{/yellow-fg} ${listenPort}` : `{yellow-fg}Expose:{/yellow-fg} ${remotePort}`,
+      `{yellow-fg}Max streams:{/yellow-fg} ${MAX_STREAMS}`,
+    ];
+    const metricLines = [
+      `{cyan-fg}Uptime:{/cyan-fg} ${uptimeSec}s`,
+      `{cyan-fg}Bytes up:{/cyan-fg} ${formatBytes(metrics.bytesUp)}`,
+      `{cyan-fg}Bytes down:{/cyan-fg} ${formatBytes(metrics.bytesDown)}`,
+      `{cyan-fg}Up rate:{/cyan-fg} ${formatBytes(rateUpBps)}/s`,
+      `{cyan-fg}Down rate:{/cyan-fg} ${formatBytes(rateDownBps)}/s`,
+      `{cyan-fg}Stream budget:{/cyan-fg} ${metrics.tcpStreams + metrics.udpStreams + activeStreams.size}/${MAX_STREAMS}`,
+      `{cyan-fg}Throttle:{/cyan-fg} ${KBPS > 0 ? KBPS + ' kbps' : 'off'}`,
+    ];
+    tuiStatus.setContent(statusLines.filter(Boolean).join('\n'));
+    tuiMetrics.setContent(metricLines.join('\n'));
+  }
+
+  tuiScreen.key(['q', 'C-c'], () => gracefulExit(0));
+  tuiScreen.key(['c'], () => {
+    tuiLog.setContent('');
+    tuiScreen.render();
+  });
+  tuiScreen.key(['p'], () => {
+    tuiLogPaused = !tuiLogPaused;
+    updateFooter();
+    if (!tuiLogPaused && tuiLogBuffer.length) {
+      while (tuiLogBuffer.length) tuiLog.log(tuiLogBuffer.shift());
+    }
+    tuiScreen.render();
+  });
+
+  tuiScreen.on('resize', relayout);
+  relayout();
+  updateHeader();
+  updateFooter();
+  updatePanels();
+
+  if (tuiPendingLogBuffer.length) {
+    tuiPendingLogBuffer.forEach((line) => tuiLog.log(line));
+    tuiPendingLogBuffer = [];
+  }
+
+  tuiTick = setInterval(() => {
+    updateHeader();
+    updatePanels();
+    updateFooter();
+    tuiScreen.render();
+  }, 500);
+}
 function jlog(level, msg, extra = {}) {
   if (!JSON_MODE) return false;
   const entry = { ts: nowIso(), level, msg, ...extra };
   console.log(JSON.stringify(entry));
   return true;
 }
-const info = (msg, extra) => jlog('info', msg, extra) || console.log(color('[INFO]', '36'), msg);
+const info = (msg, extra) => jlog('info', msg, extra) || (pushCrashLog('info', msg), emitTui('info', msg) || console.log(color('[INFO]', '36'), msg));
 const warn = (msg, extra) => {
   const s = String(msg ?? '');
-  if (!isExpectedDisconnect(s)) (jlog('warn', s, extra) || console.warn(color('[WARN]', '33'), s));
+  if (!isExpectedDisconnect(s)) (jlog('warn', s, extra) || (pushCrashLog('warn', s), emitTui('warn', s) || console.warn(color('[WARN]', '33'), s)));
 };
-const error = (msg, extra) => jlog('error', String(msg ?? ''), extra) || console.error(color('[ERROR]', '31'), msg);
-const success = (msg, extra) => jlog('success', msg, extra) || console.log(color('[SUCCESS]', '32'), msg);
-const verboseLog = (msg, extra) => { if (VERBOSE) (jlog('verbose', msg, extra) || console.log(color('[VERBOSE]', '90'), msg)); };
+const error = (msg, extra) => jlog('error', String(msg ?? ''), extra) || (pushCrashLog('error', msg), emitTui('error', msg) || console.error(color('[ERROR]', '31'), msg));
+const success = (msg, extra) => jlog('success', msg, extra) || (pushCrashLog('success', msg), emitTui('success', msg) || console.log(color('[SUCCESS]', '32'), msg));
+const verboseLog = (msg, extra) => { if (VERBOSE) (jlog('verbose', msg, extra) || (pushCrashLog('verbose', msg), emitTui('verbose', msg) || console.log(color('[VERBOSE]', '90'), msg))); };
 
 // Spinner
 let spinnerInterval = null;
 let spinnerIndex = 0;
 const spinnerChars = ['|', '/', '-', '\\'];
 let currentSpinnerMessage = '';
+let exitSpinnerInterval = null;
+let exitSpinnerRow = null;
+let exitSpinnerStartTs = 0;
+let exitSpinnerTimeoutMs = 0;
+let exitSpinnerKeyHandler = null;
+
+function visibleLength(text) {
+  return String(text).replace(/\x1b\[[0-9;]*m/g, '').length;
+}
 
 function startSpinner(message) {
   if (JSON_MODE || !process.stdout.isTTY) return;
+  if (TUI_ENABLED) {
+    tuiSpinnerMessage = message;
+    tuiStatusLine = '';
+    return;
+  }
   stopSpinner();
   currentSpinnerMessage = message;
   spinnerIndex = 0;
@@ -154,11 +391,97 @@ function startSpinner(message) {
   }, 100);
 }
 function stopSpinner() {
-  if (!spinnerInterval || JSON_MODE || !process.stdout.isTTY) return;
+  if (JSON_MODE || !process.stdout.isTTY) return;
+  if (TUI_ENABLED) {
+    tuiSpinnerMessage = '';
+    return;
+  }
+  if (!spinnerInterval) return;
   clearInterval(spinnerInterval);
   spinnerInterval = null;
   const clearLine = '\r' + ' '.repeat(process.stdout.columns || 80) + '\r';
   process.stdout.write(clearLine);
+}
+
+function startExitSpinner() {
+  if (JSON_MODE || !process.stdout.isTTY) return;
+  if (exitSpinnerInterval) return;
+  stopSpinner();
+  exitSpinnerStartTs = Date.now();
+  exitSpinnerTimeoutMs = CLOSE_ACTIVE_STREAM_TIMEOUT_MS;
+  enableExitKeypress();
+  let idx = 0;
+  exitSpinnerInterval = setInterval(() => {
+    const ch = spinnerChars[idx++ % spinnerChars.length];
+    const remainingMs = exitSpinnerTimeoutMs
+      ? Math.max(0, exitSpinnerTimeoutMs - (Date.now() - exitSpinnerStartTs))
+      : 0;
+    const remainingSec = exitSpinnerTimeoutMs ? Math.ceil(remainingMs / 1000) : 0;
+    const countdown = exitSpinnerTimeoutMs ? `${remainingSec}s` : '';
+    const line1 = color('Closing NAT Bridge', "31");
+    const line2 = color('Waiting for active streams to close...', "33");
+    const line3 = color('press Ctrl+C, q, Esc, Enter to force exit', "33");
+    const line4 = `${countdown} ${ch}`.trim();
+    const cols = process.stdout.columns || 80;
+    const rows = process.stdout.rows || 24;
+    exitSpinnerRow = exitSpinnerRow || Math.max(1, Math.floor(rows / 2) - 1);
+
+    const lines = [line1, line2, line3, line4];
+    for (let i = 0; i < lines.length; i++) {
+      const text = lines[i];
+      const pad = Math.max(0, Math.floor((cols - visibleLength(text)) / 2));
+      const line = ' '.repeat(pad) + text;
+      const col = 1;
+      const row = exitSpinnerRow + i;
+      process.stdout.write(`\x1b[${row};${col}H` + line.padEnd(cols));
+    }
+  }, 100);
+}
+
+function stopExitSpinner() {
+  if (!exitSpinnerInterval) return;
+  clearInterval(exitSpinnerInterval);
+  exitSpinnerInterval = null;
+  disableExitKeypress();
+  try {
+    const cols = process.stdout.columns || 80;
+    if (exitSpinnerRow) {
+      process.stdout.write(`\x1b[${exitSpinnerRow};1H` + ' '.repeat(cols));
+      process.stdout.write(`\x1b[${exitSpinnerRow + 1};1H` + ' '.repeat(cols));
+      process.stdout.write(`\x1b[${exitSpinnerRow + 2};1H` + ' '.repeat(cols));
+      process.stdout.write(`\x1b[${exitSpinnerRow + 3};1H` + ' '.repeat(cols));
+    }
+    process.stdout.write('\r\n');
+  } catch {}
+  exitSpinnerRow = null;
+}
+
+function enableExitKeypress() {
+  if (!process.stdin || exitSpinnerKeyHandler) return;
+  try {
+    if (process.stdin.setRawMode) process.stdin.setRawMode(true);
+    process.stdin.resume();
+  } catch {}
+  exitSpinnerKeyHandler = (chunk) => {
+    const key = chunk && chunk.toString ? chunk.toString('utf8') : '';
+    // Keys: Ctrl+C, q, Esc, Enter
+    if (key === '\u0003' || key.toLowerCase() === 'q' || key === '\u001b' || key === '\r') {
+      stopExitSpinner();
+      console.error('Force exit requested.');
+      process.exit(1);
+    }
+  };
+  process.stdin.on('data', exitSpinnerKeyHandler);
+}
+
+function disableExitKeypress() {
+  if (!process.stdin || !exitSpinnerKeyHandler) return;
+  process.stdin.off('data', exitSpinnerKeyHandler);
+  exitSpinnerKeyHandler = null;
+  try {
+    if (process.stdin.setRawMode) process.stdin.setRawMode(false);
+  } catch {}
+  try { process.stdin.pause(); } catch {}
 }
 
 // ------------------------- Startup Banner -------------------------
@@ -166,7 +489,8 @@ function stopSpinner() {
 const topicName = `NAT-bridge:${bridgeId}`;
 const topic = crypto.createHash('sha256').update(topicName).digest();
 
-console.log(color('[ NAT Bridge CLI ]', '34'));
+if (!TUI_ENABLED) console.log(color('[ NAT Bridge CLI ]', '34'));
+else emitTui('info', 'NAT Bridge CLI');
 info(`Mode       : ${mode}`);
 info(`Bridge ID  : ${bridgeId}`);
 info(`Protocol   : ${protocol}`);
@@ -185,8 +509,8 @@ if (mode === 'host' && protocol !== 'udp') {
   testConn.once('connect', () => testConn.destroy());
 }
 
-if (mode === 'client') startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`);
-else startSpinner(`waiting for P2P connections...`);
+if (mode === 'client') startSpinner(`locating host peers with bridge ID "${bridgeId}"`);
+else startSpinner(`waiting for P2P connections`);
 
 // ------------------------- Version Check -------------------------
 
@@ -195,16 +519,20 @@ https.get(VERSION_CHECK_URL, (res) => {
   res.on('data', chunk => data += chunk);
   res.on('end', () => {
     const remoteVersion = data.trim().split("\n----------\n")[0].split("\n");
-    if (remoteVersion.length === 0) {
+    if (!remoteVersion || remoteVersion.length === 0) {
       stopSpinner(); warn('Could not retrieve remote version information.');
       mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
       return;
     }
-    if (remoteVersion && remoteVersion[0] !== VERSION) {
+
+    let remoteVerNum = remoteVersion[0].split("-")[0].split('.').map(x => parseInt(x, 10));
+    let localVerNum = VERSION.split("-")[0].split('.').map(x => parseInt(x, 10));
+
+    if (remoteVerNum > localVerNum) {
       stopSpinner();
-      console.log(color('[UPDATE]', '33'), `A new version (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
-      console.log(color('[UPDATE]', '33'), 'Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
-      if (remoteVersion.length > 1) console.log(color('[UPDATE]', '33'), `Changelog: \n${remoteVersion.slice(1).join('\n')}`);
+      warn(`A new version (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
+      warn('Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
+      if (remoteVersion.length > 1) warn(`Changelog: \n        ${remoteVersion.slice(1).join('\n        ')}`);
       mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
     }
   });
@@ -260,6 +588,8 @@ let udpSocket = null;
 const activeStreams = new Set();
 let connectedToHost = false;
 
+initTui();
+
 function readLines(socket, onLine) {
   let buffer = '';
   const dataHandler = (chunk) => {
@@ -291,6 +621,7 @@ function addHandshakeTimeout(sock, label) {
 
 swarm.on('connection', (socket) => {
   stopSpinner();
+  if (TUI_ENABLED) tuiStatusLine = 'Connected';
   verboseLog('P2P connection established');
   metrics.p2pConnections++;
   metrics.lastPeer = `${socket.remoteHost || 'peer'}:${socket.remotePort || ''}`;
@@ -355,7 +686,8 @@ swarm.on('connection', (socket) => {
         try {
           if (!checkStreamBudget('tcp/udp host')) { rejectAndDestroy(socket, "Max streams reached"); return; }
 		  verboseLog(`Handshake successful! Protocol: ${clientProtocol}`);
-		  success("Connected to client!");
+          success("Connected to client!");
+          if (TUI_ENABLED) tuiStatusLine = 'Connected';
           if (clientProtocol === 'tcp') setupTCPHost(socket);
           else if (clientProtocol === 'udp') setupUDPHost(socket);
         } catch (e) {
@@ -410,7 +742,8 @@ swarm.on('connection', (socket) => {
           try {
             if (!checkStreamBudget('tcp/udp client')) { rejectAndDestroy(socket, "Max streams reached"); connectedToHost = false; return; }
             verboseLog(`Handshake successful! Protocol: ${reply.protocol}`);
-			success("Connected to host!");
+      success("Connected to host!");
+      if (TUI_ENABLED) tuiStatusLine = 'Connected';
 			if (protocol === 'tcp') setupTCPClient(socket);
             else if (protocol === 'udp') setupUDPClient(socket);
           } catch (e) {
@@ -689,8 +1022,31 @@ let exiting = false;
 function gracefulExit(code = 0) {
   if (exiting) return;
   stopSpinner();
-  info('Shutting down gracefully...');
+  info('Shutting down gracefully... (press Ctrl+C again to force exit)');
   exiting = true;
+
+  if (tuiTick) {
+    clearInterval(tuiTick);
+    tuiTick = null;
+  }
+  if (tuiScreen) {
+    try {
+      if (tuiFooter) {
+        tuiFooter.setContent(' {yellow-fg}Closing NAT-bridge...{/yellow-fg}');
+      }
+      tuiScreen.render();
+    } catch {}
+    try { tuiScreen.leave(); } catch {}
+    try { tuiScreen.destroy(); } catch {}
+    TUI_ENABLED = false;
+    startExitSpinner();
+  }
+
+  if (code !== 0 && TUI_ENABLED && crashLogBuffer.length) {
+    console.error('\n--- NAT-bridge crash log ---');
+    console.error(crashLogBuffer.join('\n'));
+    console.error('--- end crash log ---\n');
+  }
 
   // 1. Stop TCP server
   if (tcpServer) {
@@ -719,27 +1075,30 @@ function gracefulExit(code = 0) {
     swarm.destroy(() => {
       swarmClosed = true;
       info('Swarm closed');
+      stopExitSpinner();
       process.exit(code);
     });
 
     // Force exit after 3s in case swarm.destroy hangs
     setTimeout(() => {
       if (!swarmClosed) {
+        stopExitSpinner();
         warn('Swarm close timeout reached, forcing exit...');
         process.exit(code);
       }
-    }, 3000);
+    }, CLOSE_ACTIVE_STREAM_TIMEOUT_MS);
 
   } catch (e) {
     process.exit(code);
   }
 }
 
-process.on('SIGINT', () => gracefulExit(0));
-process.on('SIGTERM', () => gracefulExit(0));
+process.on('SIGINT', () => { enableExitKeypress(); gracefulExit(0); });
+process.on('SIGTERM', () => { enableExitKeypress(); gracefulExit(0); });
 process.on('uncaughtException', (err) => {
   error(`Uncaught exception: ${err.message}`);
   if (VERBOSE) console.error(err.stack || err);
+  enableExitKeypress();
   gracefulExit(1);
 });
-process.on('exit', (code) => { if (!exiting) gracefulExit(code); });
+process.on('exit', (code) => { if (!exiting) enableExitKeypress(); gracefulExit(code); });

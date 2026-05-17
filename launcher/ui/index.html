@@ -38,7 +38,7 @@
       <div class="row">
         <label class="check-item"><input type="checkbox" id="verbose" /> <span>Verbose logging</span></label>
         <label class="check-item"><input type="checkbox" id="warnings" /> <span>Show expected warnings</span></label>
-        <label class="check-item"><input type="checkbox" id="openCmd" /> <span>Open Command Prompt output</span></label>
+        <label class="check-item"><input type="checkbox" id="noTui" /> <span>Disable TUI</span></label>
         <label class="field-label" for="advancedSelect">Advanced options</label>
         <select id="advancedSelect">
           <option value="hide">Hidden</option>
@@ -71,12 +71,7 @@
 
     <div class="row actions">
       <button id="runBtn" type="button">Start</button>
-      <button id="clearBtn" type="button">Clear log</button>
       <span id="statusLabel">Status: idle</span>
-    </div>
-
-    <div id="outputWrap">
-      <div id="output" role="log" aria-live="polite" aria-label="Process output"></div>
     </div>
   </div>
 

@@ -1,3 +1,6 @@
-1.1.0
-- Updated the launcher to have a GUI
-- Added developer build tools
+1.2.0
+- Updated CLI to have a terminal UI that can be optionally disabled with the `--no-ui` flag
+- Updated update checking logic
+- Added the option to force exit when wating for streams to close
+- Launcher now only opens a terminal window
+- Reworked the build and release process
