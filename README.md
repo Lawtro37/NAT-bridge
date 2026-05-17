@@ -4,6 +4,8 @@
 
 A sweet and simple single command Node.js CLI tool for tunneling TCP and UDP traffic over a peer-to-peer (P2P) network using [Hyperswarm](https://github.com/hyperswarm/hyperswarm). NAT-bridge allows you to expose local services to remote clients, bypassing NAT/firewall restrictions (no need for port fowarding).
 
+**Note:** I have not updated this readme in ages and I'm too lazy to update it right now. Some stuff in here may be inaccurate. I'm sure you'll figure it out though.
+
 ---
 
 ## Features
@@ -25,6 +27,22 @@ A sweet and simple single command Node.js CLI tool for tunneling TCP and UDP tra
 
 ```bash
 npm install
+```
+
+## Windows EXE Build
+
+The standalone executable is built with `caxa`.
+
+```bash
+npm run build:exe
+```
+
+This produces `nat-bridge.exe` in the project root and copies it to `dist/nat-bridge.exe` for the packaging flow.
+
+If you want the full release bundle, including the launcher and example configurations, run:
+
+```bash
+npm run package:all
 ```
 
 ## GUI Launcher
