@@ -7,6 +7,11 @@ const path = require("path");
 let currentProcess = null;
 let mainWindow = null;
 
+if (!ipcMain) {
+    console.error("This launcher must be started with Electron (use `npm run launcher`).");
+    process.exit(1);
+}
+
 const launcherDataDir = path.join(os.tmpdir(), "nat-bridge-launcher");
 const launcherCacheDir = path.join(launcherDataDir, "Cache");
 try {
@@ -14,24 +19,22 @@ try {
     app.setPath("userData", launcherDataDir);
     app.setPath("cache", launcherCacheDir);
 } catch (_err) {
-    // If path override fails, Electron will fall back to defaults.
+    
 }
 
 function findNatBridgeExecutable() {
     const isWin = os.platform() === "win32";
     const exeName = isWin ? "nat-bridge.exe" : "nat-bridge";
 
-    // Candidate locations to search for the native helper. When the app is
-    // packaged the running exe's directory is the most likely location.
     const candidates = [
         path.resolve(__dirname, exeName),
         path.resolve(__dirname, "..", exeName),
-        // also check the parent of the parent (useful when launcher sits in a nested folder)
+        // also check the parent of the parent
         path.resolve(__dirname, "..", "..", exeName),
         path.resolve(process.cwd(), exeName),
         path.resolve(process.cwd(), 'dist', exeName),
         path.join(path.dirname(process.execPath || ''), exeName),
-        // if nat-bridge is placed next to the app bundle (one level up)
+        // if nat-bridge is placed next to the app bundle
         path.join(path.dirname(process.execPath || ''), '..', exeName),
         path.join(process.resourcesPath || '', exeName),
         path.join(process.resourcesPath || '', '..', exeName),
@@ -43,7 +46,6 @@ function findNatBridgeExecutable() {
         } catch (_) {}
     }
 
-    // Fallback: search PATH
     const cmd = isWin ? "where" : "which";
     try {
         const result = spawnSync(cmd, [exeName], { encoding: "utf-8" });
@@ -71,7 +73,6 @@ function validateModeAndBridgeId(payload) {
         return { error: "Mode must be host or client.", mode: null };
     }
 
-    // Pull and normalize the bridge id while enforcing rules for host/client modes.
     let bridgeId = String(payload.bridgeId || "").trim();
     if (mode === "host" && !bridgeId) bridgeId = generateRandomID();
     if (mode === "client" && !bridgeId) {
@@ -139,15 +140,11 @@ function validatePayload(payload) {
     return validateNumericOptions(payload);
 }
 
-function sendLog(stream, text) {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.webContents.send("launcher:log", { stream, text });
-}
-
-function sendStatus(status) {
+function sendStatus(status, message = "") {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.webContents.send("launcher:status", {
         status,
+        message,
         running: !!(currentProcess && !currentProcess.killed),
     });
 }
@@ -158,12 +155,10 @@ function quoteWinArg(arg) {
     return `"${text.replace(/"/g, '\\"')}"`;
 }
 
-function startProcessWithArgs(exe, args, options = {}) {
-    const useCmdWindow = options.openCommandPrompt && os.platform() === "win32";
+function startProcessWithArgs(exe, args) {
+    const isWin = os.platform() === "win32";
 
-    if (useCmdWindow) {
-        // Open a detached Command Prompt window on Windows so users can see
-        // native console output (useful for interactive debugging).
+    if (isWin) {
         const commandText = [quoteWinArg(exe), ...args.map(quoteWinArg)].join(" ");
         currentProcess = spawn("cmd.exe", ["/k", commandText], {
             windowsHide: false,
@@ -171,30 +166,20 @@ function startProcessWithArgs(exe, args, options = {}) {
             shell: true,
             detached: true,
         });
-        sendLog("stdout", `[info] Opened Command Prompt window for output.\n`);
     } else {
         currentProcess = spawn(exe, args, {
-            stdio: ["ignore", "pipe", "pipe"],
+            stdio: "ignore",
             shell: false,
-        });
-
-        currentProcess.stdout.on("data", (chunk) => {
-            sendLog("stdout", chunk.toString());
-        });
-
-        currentProcess.stderr.on("data", (chunk) => {
-            sendLog("stderr", chunk.toString());
+            detached: true,
         });
     }
 
     currentProcess.on("close", (code) => {
-        sendLog("stdout", `\n[info] nat-bridge exited`);
         currentProcess = null;
         sendStatus("idle");
     });
 
     currentProcess.on("error", (err) => {
-        sendLog("stderr", `[launcher-error] ${err.message}\n`);
         currentProcess = null;
         sendStatus("error");
     });
@@ -219,6 +204,7 @@ function buildBridgeArgs(payload) {
 
     if (payload.verbose) args.push("--verbose");
     if (payload.warnings) args.push("--warnings");
+    if (payload.noTui) args.push("--no-tui");
     if (payload.secret) args.push("--secret", String(payload.secret));
     if (payload.status) args.push("--status", String(payload.status));
     if (payload.maxStreams) args.push("--max-streams", String(payload.maxStreams));
@@ -235,9 +221,7 @@ function startFromConfigFile(exe, payload) {
         return { ok: false, message: "Configuration file was not found." };
     }
 
-    startProcessWithArgs(exe, ["config", configPath], {
-        openCommandPrompt: !!payload.openCommandPrompt,
-    });
+    startProcessWithArgs(exe, ["config", configPath]);
     return { ok: true, message: "nat-bridge started." };
 }
 
@@ -246,9 +230,7 @@ function startFromInteractiveInput(exe, payload) {
     if (error) return { ok: false, message: error };
 
     const args = buildBridgeArgs(payload);
-    startProcessWithArgs(exe, args, {
-        openCommandPrompt: !!payload.openCommandPrompt,
-    });
+    startProcessWithArgs(exe, args);
     return { ok: true, message: "nat-bridge started." };
 }
 
@@ -267,8 +249,6 @@ function startLauncher(payload) {
 }
 
 function killNatBridgeCmdWindows() {
-    // Query PowerShell for cmd.exe processes whose command line contains
-    // the literal `nat-bridge`, then taskkill only those PIDs.
     try {
         const psArgs = [
             "-NoProfile",
@@ -293,7 +273,7 @@ function killNatBridgeCmdWindows() {
             spawnSync("taskkill", args, { windowsHide: true, stdio: "ignore" });
         }
     } catch (_) {
-        // ignore any failures here; this cleanup is best-effort only
+        // Well we tried.
     }
 }
 
@@ -301,9 +281,9 @@ function createMainWindow() {
     const systemBg = nativeTheme.shouldUseDarkColors ? "#1f1f1f" : "#f0f0f0";
     mainWindow = new BrowserWindow({
         width: 645,
-        height: 760,
+        height: 460,
         minWidth: 645,
-        minHeight: 600,
+        minHeight: 460,
         title: "NAT-bridge Launcher",
         backgroundColor: systemBg,
         webPreferences: {
@@ -335,8 +315,7 @@ ipcMain.handle("launcher:toggle", (_event, payload) => {
 
     if (isRunning) {
         currentProcess.kill();
-        sendLog("stdout", "[info] stop signal sent\n");
-        // use taskkill on Windows to force kill if it doesn't exit gracefully in a few seconds
+        // Nuke it if it refuses to die
         if (os.platform() === "win32") {
             setTimeout(() => {
                 killNatBridgeCmdWindows();
@@ -349,12 +328,10 @@ ipcMain.handle("launcher:toggle", (_event, payload) => {
     sendStatus("starting");
     const result = startLauncher(payload);
     if (!result.ok) {
-        sendLog("stderr", `[error] ${result.message}\n`);
-        sendStatus("error");
+        dialog.showErrorBox("Launcher Error", result.message || "Failed to start nat-bridge.");
+        sendStatus("error", result.message);
         return { ok: false, running: false, message: result.message };
     }
-
-    sendLog("stdout", `[info] ${result.message}\n`);
     sendStatus("running");
     return { ok: true, running: true, message: result.message };
 });
