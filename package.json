@@ -9,16 +9,16 @@
   "bin": "main.js",
   "scripts": {
     "launcher": "electron launcher/nat-bridge-launcher.js",
-    "build:exe": "node scripts/icon_exe_safe.js",
+    "build": "node scripts/build_minimal_exe.js",
     "build:launcher": "npx electron-packager launcher \"NAT-bridge Launcher\" --platform=win32 --arch=x64 --out build_temp --overwrite --icon=icons/icon.ico --prune=false",
-    "package:all": "npm run build:exe && npm run build:launcher && node scripts/assemble_release.js"
+    "release": "npm run build && npm run build:launcher && node scripts/assemble_release.js"
   },
   "dependencies": {
+    "blessed": "^0.1.81",
+    "electron": "^41.1.1",
     "hyperswarm": "^4.11.7",
     "multiplex": "^6.7.0",
-    "pump": "^3.0.3",
-    "blessed": "^0.1.81",
-    "electron": "^41.1.1"
+    "pump": "^3.0.3"
   },
   "devDependencies": {
     "@appthreat/caxa": "^3.0.0",

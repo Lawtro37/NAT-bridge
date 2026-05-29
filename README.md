@@ -34,7 +34,7 @@ npm install
 The standalone executable is built with `caxa`.
 
 ```bash
-npm run build:exe
+npm run build
 ```
 
 This produces `nat-bridge.exe` in the project root and copies it to `dist/nat-bridge.exe` for the packaging flow.
@@ -42,7 +42,7 @@ This produces `nat-bridge.exe` in the project root and copies it to `dist/nat-br
 If you want the full release bundle, including the launcher and example configurations, run:
 
 ```bash
-npm run package:all
+npm run release
 ```
 
 ## GUI Launcher
