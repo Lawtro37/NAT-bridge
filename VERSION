@@ -1,6 +1,36 @@
+1.2.1
+- Fixed not being able to scroll through logs in TUI
+- Revamped the update checking system
+- Added and indicator when waiting for the streams to close
+- Minor bug fixes
+----------
 1.2.0
 - Updated CLI to have a terminal UI that can be optionally disabled with the `--no-ui` flag
 - Updated update checking logic
 - Added the option to force exit when wating for streams to close
 - Launcher now only opens a terminal window
 - Reworked the build and release process
+----------
+1.0.5
+- Updated the launcher to have a GUI
+- Added developer build tools
+----------
+1.0.4
+- added authentication through shared secrets 
+- bug fixes among other things
+----------
+1.0.3
+- no longer prints expected warnings (these can be re-activated with "-w" or "--warnings")
+- utilises the "pump" node library for better pipe error handling
+- fixed a bug AGAIN where the process would refuse to exit and just hang
+----------
+1.0.2
+- fixed a bug were the client just hanged after attempting to exit
+- now more politely closes sockets when exiting 
+- added a cool spinner thingy when locating peers
+- added a success message when connecting to a peer
+----------
+1.0.1
+- NAT-bridge will now attempt to reconnect if disconnected.
+- Added new version/update notices.
+- Added loading from configuration files (examples provided in the "/configuration examples" directory).
