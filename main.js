@@ -12,7 +12,7 @@ const pump = require('pump');
 const { Transform } = require('stream');
 
 const VERSION = '1.2.0';
-const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/nat-bridge/main/VERSION';
+const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/NAT-bridge/refs/heads/main/VERSION';
 
 // ------------------------- CLI / Helpers -------------------------
 
@@ -48,6 +48,7 @@ let TCP_CONNECT_RETRIES = parseInt(parseArgValue('tcp-retries', null, '5'), 10);
 let TCP_RETRY_DELAY_MS = parseInt(parseArgValue('tcp-retry-delay', null, '500'), 10);
 let TUI_ENABLED = !NO_TUI && !JSON_MODE && process.stdout.isTTY;
 let CLOSE_ACTIVE_STREAM_TIMEOUT_MS = 5000;
+let IGNORE_CRITICAL_UPDATES = parseArgFlag('ignore-critical-updates', null);
 
 function printHelpAndExit() {
   console.log(`
@@ -172,7 +173,9 @@ function formatTuiLog(level, msg) {
     warn: 'yellow-fg',
     error: 'red-fg',
     success: 'green-fg',
-    verbose: 'gray-fg'
+    verbose: 'gray-fg',
+    update: 'yellow-fg',
+    'critical update': 'red-fg'
   };
   const color = colorByLevel[lvl] || 'white-fg';
   return `{${color}}[${label}]{/${color}} ${text}`;
@@ -326,6 +329,14 @@ function initTui() {
     tuiScreen.render();
   });
 
+  // Keyboard scrolling for logs (arrows, vi keys, page up/down, home/end)
+  tuiScreen.key(['up', 'k'], () => { try { tuiLog.scroll(-1); } catch {} tuiScreen.render(); });
+  tuiScreen.key(['down', 'j'], () => { try { tuiLog.scroll(1); } catch {} tuiScreen.render(); });
+  tuiScreen.key(['pageup'], () => { try { const h = tuiLog.height || 10; tuiLog.scroll(-Math.max(1, Math.floor(h / 2))); } catch {} tuiScreen.render(); });
+  tuiScreen.key(['pagedown'], () => { try { const h = tuiLog.height || 10; tuiLog.scroll(Math.max(1, Math.floor(h / 2))); } catch {} tuiScreen.render(); });
+  tuiScreen.key(['home'], () => { try { if (tuiLog.scrollTo) tuiLog.scrollTo(0); else if (tuiLog.setScrollPerc) tuiLog.setScrollPerc(0); else tuiLog.scroll(-999999); } catch {} tuiScreen.render(); });
+  tuiScreen.key(['end'], () => { try { if (tuiLog.getScrollHeight && tuiLog.scrollTo) tuiLog.scrollTo(tuiLog.getScrollHeight()); else if (tuiLog.setScrollPerc) tuiLog.setScrollPerc(100); else tuiLog.scroll(999999); } catch {} tuiScreen.render(); });
+
   tuiScreen.on('resize', relayout);
   relayout();
   updateHeader();
@@ -358,6 +369,8 @@ const warn = (msg, extra) => {
 const error = (msg, extra) => jlog('error', String(msg ?? ''), extra) || (pushCrashLog('error', msg), emitTui('error', msg) || console.error(color('[ERROR]', '31'), msg));
 const success = (msg, extra) => jlog('success', msg, extra) || (pushCrashLog('success', msg), emitTui('success', msg) || console.log(color('[SUCCESS]', '32'), msg));
 const verboseLog = (msg, extra) => { if (VERBOSE) (jlog('verbose', msg, extra) || (pushCrashLog('verbose', msg), emitTui('verbose', msg) || console.log(color('[VERBOSE]', '90'), msg))); };
+const update = (msg, extra) => jlog('update', msg, extra) || (pushCrashLog('update', msg), emitTui('update', msg) || console.log(color('[UPDATE]', '33'), msg));
+const criticalVersionWarning = (msg, extra) => jlog('critical update', msg, extra) || (pushCrashLog('critical update', msg), emitTui('critical update', msg) || console.error(color('[CRITICAL UPDATE]', '31'), msg));
 
 // Spinner
 let spinnerInterval = null;
@@ -467,6 +480,7 @@ function enableExitKeypress() {
     // Keys: Ctrl+C, q, Esc, Enter
     if (key === '\u0003' || key.toLowerCase() === 'q' || key === '\u001b' || key === '\r') {
       stopExitSpinner();
+      stopSpinner();
       console.error('Force exit requested.');
       process.exit(1);
     }
@@ -486,7 +500,7 @@ function disableExitKeypress() {
 
 // ------------------------- Startup Banner -------------------------
 
-const topicName = `NAT-bridge:${bridgeId}`;
+const topicName = `NAT-bridge:${bridgeId}`; // if any of yous change this older versions won't be able to connect to newer ones. so you better have a good reason change it.
 const topic = crypto.createHash('sha256').update(topicName).digest();
 
 if (!TUI_ENABLED) console.log(color('[ NAT Bridge CLI ]', '34'));
@@ -512,27 +526,97 @@ if (mode === 'host' && protocol !== 'udp') {
 if (mode === 'client') startSpinner(`locating host peers with bridge ID "${bridgeId}"`);
 else startSpinner(`waiting for P2P connections`);
 
+let STOP_EXECUTION = false;
+
 // ------------------------- Version Check -------------------------
+// this is kinda spaghetti code hell but whatever, it works.
 
 https.get(VERSION_CHECK_URL, (res) => {
   let data = '';
   res.on('data', chunk => data += chunk);
   res.on('end', () => {
-    const remoteVersion = data.trim().split("\n----------\n")[0].split("\n");
-    if (!remoteVersion || remoteVersion.length === 0) {
+    const versionBlocks = data.trim().split("\n----------\n").map(block => block.trim()).filter(Boolean);
+
+    if (!versionBlocks.length) {
       stopSpinner(); warn('Could not retrieve remote version information.');
       mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
       return;
     }
 
-    let remoteVerNum = remoteVersion[0].split("-")[0].split('.').map(x => parseInt(x, 10));
-    let localVerNum = VERSION.split("-")[0].split('.').map(x => parseInt(x, 10));
+    function parseVersionArray(ver) {
+      return String(ver).split("-")[0].split('.').map(x => parseInt(x, 10));
+    }
 
-    if (remoteVerNum > localVerNum) {
+    function compareVersionArrays(a, b) {
+      const len = Math.max(a.length, b.length);
+      for (let i = 0; i < len; i++) {
+        const ai = Number.isFinite(a[i]) ? a[i] : 0;
+        const bi = Number.isFinite(b[i]) ? b[i] : 0;
+        if (ai > bi) return 1;
+        if (ai < bi) return -1;
+      }
+      return 0;
+    }
+
+    function formatChangelogBlock(version, lines) {
+      const cleaned = lines.map(line => line.trim()).filter(Boolean);
+      if (!cleaned.length) return `${version}\n        (no release notes provided)`;
+      return `${version}\n        ${cleaned.join('\n        ')}`;
+    }
+
+    const remoteVersion = versionBlocks[0].split("\n").map(line => line.trim()).filter(Boolean);
+    const remoteVerNum = parseVersionArray(remoteVersion[0]);
+    const localVerNum = parseVersionArray(VERSION);
+
+    if (remoteVerNum.some(isNaN) || localVerNum.some(isNaN)) {
+      stopSpinner(); warn('Received invalid version information from server.');
+      mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
+      return;
+    }
+
+    const cmp = compareVersionArrays(remoteVerNum, localVerNum);
+    const newerBlocks = versionBlocks
+      .map(block => block.split("\n").map(line => line.trim()).filter(Boolean))
+      .filter(blockLines => blockLines.length > 0 && compareVersionArrays(parseVersionArray(blockLines[0]), localVerNum) > 0);
+
+    const newerVersions = newerBlocks.map(blockLines => formatChangelogBlock(blockLines[0], blockLines.slice(1)));
+
+    // check for versions with "[CRITICAL]" in the notes and warn about them regardless of semver if we're on an older version.
+    const hasCritical = newerBlocks.some(blockLines => {
+      const notes = (blockLines.slice(1) || []).map(l => String(l).trim()).filter(Boolean);
+      return notes.some(line => line.includes('[CRITICAL]'));
+    });
+
+    if (hasCritical) {
       stopSpinner();
-      warn(`A new version (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
-      warn('Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
-      if (remoteVersion.length > 1) warn(`Changelog: \n        ${remoteVersion.slice(1).join('\n        ')}`);
+      criticalVersionWarning(`A critical (most likely security) update (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
+      criticalVersionWarning('Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
+      if (newerVersions.length > 0) criticalVersionWarning(`Changelog: \n        ${newerVersions.join('\n        ----------\n        ')}`);
+      if (!IGNORE_CRITICAL_UPDATES) {
+        criticalVersionWarning('Execution will not continue. If you want to continue anyway, use --ignore-critical-updates flag (not recommended).');
+        if (TUI_ENABLED) {
+          stopExecutionForCriticalUpdate();
+          return;
+        } else {
+          gracefulExit(0);
+        }
+      } else {
+        criticalVersionWarning('You have chosen to ignore critical update warnings. Make sure you understand the risks.');
+        mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
+        return;
+      }
+    }
+
+    if (cmp > 0) {
+      stopSpinner();
+      update(`A new version (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
+      update('Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
+      if (newerVersions.length > 0) update(`Changelog:\n        ${newerVersions.join('\n        ----------\n        ')}`);
+      mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
+    } else if (cmp < 0) {
+      stopSpinner();
+      update(`You are running a newer version (${VERSION}) than the latest release (${remoteVersion[0]}). thank you for remembering to change the version in the code.`);
+      if (newerVersions.length > 0) update(`Changelog for newer releases:\n        ${newerVersions.join('\n        ----------\n        ')}`);
       mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
     }
   });
@@ -620,6 +704,10 @@ function addHandshakeTimeout(sock, label) {
 }
 
 swarm.on('connection', (socket) => {
+  if (STOP_EXECUTION) {
+    try { socket.destroy(); } catch {}
+    return;
+  }
   stopSpinner();
   if (TUI_ENABLED) tuiStatusLine = 'Connected';
   verboseLog('P2P connection established');
@@ -1009,15 +1097,71 @@ swarm.on('error', (err) => {
   gracefulExit(1);
 });
 
-swarm.on('close', () => {
+function handleSwarmClose() {
   warn("Disconnected. Attempting reconnect in 5 seconds...");
   connectedToHost = false;
-  setTimeout(() => swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' }), 5000);
-});
+  if (exiting) return; // stay out of the swarm
+  setTimeout(() => {
+    if (!exiting) swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' });
+  }, 5000);
+}
+
+swarm.on('close', handleSwarmClose);
 
 // ------------------------- Cleanup -------------------------
 
 let exiting = false;
+
+function printCrashLog() {
+  if (crashLogBuffer.length) {
+    console.error('\n--- NAT-bridge crash log ---');
+    crashLogBuffer.forEach(line => console.error(line));
+    console.error('--- end crash log ---\n');
+  }
+}
+
+function stopExecutionForCriticalUpdate() {
+  STOP_EXECUTION = true;
+  connectedToHost = false;
+  stopSpinner();
+
+  try { if (swarm && swarm.removeListener) swarm.removeListener('close', handleSwarmClose); } catch {}
+  try { if (swarm && swarm.leave) swarm.leave(topic); } catch {}
+
+  if (tcpServer) {
+    try { tcpServer.close(() => info('TCP server closed')); } catch {}
+    tcpServer = null;
+  }
+
+  if (udpSocket) {
+    try { udpSocket.close(() => info('UDP socket closed')); } catch {}
+    udpSocket = null;
+  }
+
+  for (const stream of activeStreams) {
+    try {
+      if (!stream.destroyed) {
+        stream.end();
+        setTimeout(() => { if (!stream.destroyed) stream.destroy(); }, 1000);
+      }
+    } catch (err) { warn(`Error while closing stream: ${err.message}`); }
+  }
+  activeStreams.clear();
+
+  try {
+    if (swarm) swarm.destroy(() => info('Swarm closed'));
+  } catch {}
+
+  if (TUI_ENABLED) {
+    tuiStatusLine = '{red-fg}Critical update detected - execution stopped{/red-fg}';
+    if (tuiFooter) {
+      tuiFooter.setContent(' {red-fg}Critical update detected. Execution stopped. Press q to quit.{/red-fg}');
+    }
+    if (tuiScreen) {
+      try { tuiScreen.render(); } catch {}
+    }
+  }
+}
 
 function gracefulExit(code = 0) {
   if (exiting) return;
@@ -1038,27 +1182,19 @@ function gracefulExit(code = 0) {
     } catch {}
     try { tuiScreen.leave(); } catch {}
     try { tuiScreen.destroy(); } catch {}
-    TUI_ENABLED = false;
     startExitSpinner();
+  } else {
+    startSpinner("Waiting for active streams to close...");
   }
 
-  if (code !== 0 && TUI_ENABLED && crashLogBuffer.length) {
-    console.error('\n--- NAT-bridge crash log ---');
-    console.error(crashLogBuffer.join('\n'));
-    console.error('--- end crash log ---\n');
-  }
-
-  // 1. Stop TCP server
   if (tcpServer) {
     try { tcpServer.close(() => info('TCP server closed')); } catch {}
   }
 
-  // 2. Stop UDP socket
   if (udpSocket) {
     try { udpSocket.close(() => info('UDP socket closed')); } catch {}
   }
 
-  // 3. Close all active streams
   for (const stream of activeStreams) {
     try {
       if (!stream.destroyed) {
@@ -1069,20 +1205,28 @@ function gracefulExit(code = 0) {
   }
   activeStreams.clear();
 
-  // 4. Destroy swarm with a fallback timeout
+  // idk why but the swarm just refuses to die so I alaways end up having to force kill it
+  // so for now I give it a chance even though it will probably never close properly, and then nuke it after a timeout
   try {
+    try { if (swarm && swarm.removeListener) swarm.removeListener('close', handleSwarmClose); } catch {}
+    try { if (swarm && swarm.leave) swarm.leave(topic); } catch {}
+
     let swarmClosed = false;
     swarm.destroy(() => {
       swarmClosed = true;
+      stopSpinner();
       info('Swarm closed');
       stopExitSpinner();
+      if (code !== 0 && TUI_ENABLED) printCrashLog();
       process.exit(code);
     });
 
-    // Force exit after 3s in case swarm.destroy hangs
+    // Force exit after timeout in case swarm.destroy hangs
     setTimeout(() => {
       if (!swarmClosed) {
+        stopSpinner();
         stopExitSpinner();
+        if (code !== 0 && TUI_ENABLED) printCrashLog();
         warn('Swarm close timeout reached, forcing exit...');
         process.exit(code);
       }
