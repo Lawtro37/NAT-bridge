@@ -44,6 +44,10 @@ try {
   console.log('Installing production dependencies into temporary build folder...');
   run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--production', '--prefix', tempDir]);
 
+  // caxa writes its payload next to the output exe, so the target directory must exist first.
+  fs.mkdirSync(distBinDir, { recursive: true });
+  fs.mkdirSync(distDir, { recursive: true });
+
   // Prepare a temp stub with the icon applied
   const tempStubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nat-bridge-stub-'));
   const tempStubPath = path.join(tempStubDir, 'caxa-stub.exe');
@@ -66,8 +70,6 @@ try {
   ], { cwd: projectRoot });
 
   // Mirror the working single-file exe into dist for the release flow.
-  fs.mkdirSync(distBinDir, { recursive: true });
-  fs.mkdirSync(distDir, { recursive: true });
   fs.copyFileSync(distBinExePath, distExePath);
   console.log('Built minimal main-win-x64.exe with zstd compression and copied it to dist/nat-bridge.exe.');
 } catch (err) {
