@@ -297,7 +297,7 @@ function initTui() {
     lastRateUp = metrics.bytesUp;
     lastRateDown = metrics.bytesDown;
     const statusLines = [
-      `{yellow-fg}Connected:{/yellow-fg} ${connectedToHost ? '{green-fg}yes{/green-fg}' : '{red-fg}no{/red-fg}'}`,
+      `{yellow-fg}Connected:{/yellow-fg} ${(connectedToHost || connectedToClient) ? '{green-fg}yes{/green-fg}' : '{red-fg}no{/red-fg}'}`,
       `{yellow-fg}P2P connections:{/yellow-fg} ${metrics.p2pConnections}`,
       protocol === "both" || protocol === "tcp" ? `{yellow-fg}TCP streams:{/yellow-fg} ${metrics.tcpStreams}` : null,
       protocol === "both" || protocol === "udp" ? `{yellow-fg}UDP streams:{/yellow-fg} ${metrics.udpStreams}` : null,
@@ -392,7 +392,7 @@ function visibleLength(text) {
 }
 
 function startSpinner(message) {
-  if (NO_FANCY_LOGS) console.log(`[WAIT] ${message}`); return;
+  if (NO_FANCY_LOGS) { console.log(`[WAIT] ${message}`); return; }
   if (JSON_MODE || !process.stdout.isTTY) return;
   if (TUI_ENABLED) {
     tuiSpinnerMessage = message;
@@ -631,8 +631,14 @@ if (!SKIP_UPDATE_CHECK) {
   warn('Make sure to check for updates regularly to receive important security fixes and new features: https://github.com/Lawtro37/nat-bridge/releases');
 }
 
-// if (mode === 'client') startSpinner(`locating host peers with bridge ID "${bridgeId}"`);
-// else startSpinner(`waiting for P2P connections`);
+let blockedIPs
+try {blockedIPs = require('./blocked-ips.json');} catch (e) { }
+function isBlockedIP(ip) {
+  if (blockedIPs && Array.isArray(blockedIPs)) {
+    return blockedIPs.includes(ip);
+  }
+  return false;
+}
 
 // ------------------------- Metrics / Status -------------------------
 
@@ -680,6 +686,7 @@ let tcpServer = null;
 let udpSocket = null;
 const activeStreams = new Set();
 let connectedToHost = false;
+let connectedToClient = false;
 
 initTui();
 
@@ -726,11 +733,21 @@ swarm.on('connection', (socket) => {
   socket.on('error', (err) => warn(`Socket error: ${err.message}`));
   socket.on('close', () => { verboseLog('P2P socket closed'); });
 
+  verboseLog("socket: \n" + JSON.stringify(socket, null, 2));
+
   verboseLog('Beginning handshake');
 
   addHandshakeTimeout(socket, mode.toUpperCase());
 
   if (mode === 'host') {
+    verboseLog(`validatting IP address against blocklist`);
+    if (isBlockedIP(socket.rawStream.remoteHost)) {
+      warn(`Blocked connection from ${socket.rawStream.remoteHost} (on blocklist)`);
+      return socket.destroy();
+    } else {
+      verboseLog(`IP address "${socket.rawStream.remoteHost}" passed blocklist check`);
+    }
+
     socket.write("HELLO:host\n");
     let stage = 0;
 
@@ -751,20 +768,20 @@ swarm.on('connection', (socket) => {
               const h = resp.slice(5);
               if (h !== hmac(SECRET, n1)) { error("Client auth failed."); rejectAndDestroy(socket, "Auth failed"); return; }
               // Mutual: respond to client's challenge if any
-			  verboseLog('Challenge successful!');
+			        verboseLog('Challenge successful!');
               socket.write(`OK\n`);
               stage = 1;
             });
           } else {
             stage = 1;
-			socket.write("OK\n");
+			      socket.write("OK\n");
           }
         } else {
           error("Invalid initial handshake message from client.");
           stopReading(); rejectAndDestroy(socket, "Invalid initial handshake");
         }
       } else if (stage === 1) {
-		verboseLog(`Starting protocol negotiation`);
+		    verboseLog(`Starting protocol negotiation`);
         const msg = safeJSON(line);
         const clientProtocol = msg.protocol;
         if (!clientProtocol || (protocol !== 'both' && clientProtocol !== protocol)) {
@@ -782,11 +799,12 @@ swarm.on('connection', (socket) => {
 
         try {
           if (!checkStreamBudget('tcp/udp host')) { rejectAndDestroy(socket, "Max streams reached"); return; }
-		  verboseLog(`Handshake successful! Protocol: ${clientProtocol}`);
+		      verboseLog(`Handshake successful! Protocol: ${clientProtocol}`);
           success("Connected to client!");
           if (TUI_ENABLED) tuiStatusLine = 'Connected';
           if (clientProtocol === 'tcp') setupTCPHost(socket);
           else if (clientProtocol === 'udp') setupUDPHost(socket);
+          connectedToClient = true;
         } catch (e) {
           error(`Failed to setup host stream: ${e.message}`);
           socket.destroy();
@@ -803,13 +821,13 @@ swarm.on('connection', (socket) => {
       if (stage === 0) {
         if (line === "HELLO:client") {
           warn("Another client tried to connect to this client. Ignoring.");
-          stopReading(); rejectAndDestroy(socket, "Client-to-client conflict");
+          stopReading(); rejectAndDestroy(socket, "Client-to-client conflict", true);
         } else if (line === "HELLO:host") {
           stage = 0.5;
         } 
 	  } else if (stage == 0.5) {
 		if (line.startsWith('CHAL:')) {
-		  verboseLog("Received host challenge");
+		      verboseLog("Received host challenge");
           // Respond to host challenge
           const n = line.slice(5);
           if (!SECRET) { error("Host requested auth but no --secret provided."); rejectAndDestroy(socket, "Auth not configured"); return; }
@@ -825,7 +843,7 @@ swarm.on('connection', (socket) => {
           socket.write(JSON.stringify({ protocol, clientChal }) + '\n');
         }
       } else if (stage === 1) {
-		verboseLog("Starting protocol negotiation");
+		    verboseLog("Starting protocol negotiation");
         const reply = safeJSON(line);
         if (!reply.protocol || reply.protocol !== protocol) {
           error("Host does not support requested protocol.");
@@ -839,9 +857,9 @@ swarm.on('connection', (socket) => {
           try {
             if (!checkStreamBudget('tcp/udp client')) { rejectAndDestroy(socket, "Max streams reached"); connectedToHost = false; return; }
             verboseLog(`Handshake successful! Protocol: ${reply.protocol}`);
-      success("Connected to host!");
-      if (TUI_ENABLED) tuiStatusLine = 'Connected';
-			if (protocol === 'tcp') setupTCPClient(socket);
+            success("Connected to host!");
+            if (TUI_ENABLED) tuiStatusLine = 'Connected';
+            if (protocol === 'tcp') setupTCPClient(socket);
             else if (protocol === 'udp') setupUDPClient(socket);
           } catch (e) {
             error(`Failed to setup client stream: ${e.message}`);
@@ -953,6 +971,12 @@ function setupTCPClient(p2pSocket) {
     if (err && !isExpectedDisconnect(err)) warn(`Pump error: ${err.message}`);
   });
   mux.on('error', (err) => warn(`Multiplex error: ${err.message}`));
+  p2pSocket.on("close", () => { 
+    verboseLog('Closing TCP client'); 
+    connectedToHost = false; 
+    startSpinner("locating host peers with the bridge ID \"" + bridgeId + "\"...");
+    tcpServer.close(); 
+  });
 
   tcpServer = net.createServer((local) => {
     if (!checkStreamBudget('tcp stream')) { local.destroy(); return; }
@@ -1027,6 +1051,12 @@ function setupUDPClient(p2pSocket) {
     if (err && !isExpectedDisconnect(err)) warn(`Pump error: ${err.message}`);
   });
   mux.on('error', (err) => warn(`Multiplex error: ${err.message}`));
+  p2pSocket.on("close", () => { 
+    verboseLog('Closing UDP client'); 
+    connectedToHost = false; 
+    startSpinner("locating host peers with the bridge ID \"" + bridgeId + "\"...");
+    udpSocket.close(); 
+  });
 
   udpSocket = dgram.createSocket('udp4');
   const stream = mux.createStream();
@@ -1085,7 +1115,7 @@ function rejectAndDestroy(socket, reason, block = false) {
   if (block) rejectedPeers.add(key);
   warn("Rejected Peer: " + reason);
   try { socket.destroy(); } catch {}
-  setTimeout(() => rejectedPeers.delete(key), 10000);
+  setTimeout(() => rejectedPeers.delete(key), 1000000);
 }
 
 function checkStreamBudget(reason) {
