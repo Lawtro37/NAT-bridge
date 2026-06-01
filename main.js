@@ -11,7 +11,7 @@ const http = require('http');
 const pump = require('pump');
 const { Transform } = require('stream');
 
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/NAT-bridge/refs/heads/main/VERSION';
 
 // ------------------------- CLI / Helpers -------------------------
@@ -39,16 +39,18 @@ let VERBOSE = parseArgFlag('verbose', 'v');
 let EXPECTEDWARNINGS = parseArgFlag('warnings', 'w');
 let JSON_MODE = parseArgFlag('json', null);
 let NO_TUI = parseArgFlag('no-tui', null);
-let SECRET = parseArgValue('secret', 's', '');          // optional shared secret
+let NO_FANCY_LOGS = parseArgFlag('no-fancy-logs', null);
+if (NO_FANCY_LOGS) NO_TUI = true;
+let SECRET = parseArgValue('secret', 's', '');
 let STATUS_PORT = parseInt(parseArgValue('status', null, '0'), 10) || 0;
-let MAX_STREAMS = parseInt(parseArgValue('max-streams', null, '256'), 10); // per process
-let KBPS = parseInt(parseArgValue('kbps', null, '0'), 10); // 0 = unlimited
+let MAX_STREAMS = parseInt(parseArgValue('max-streams', null, '256'), 10);
+let KBPS = parseInt(parseArgValue('kbps', null, '0'), 10);
 let HANDSHAKE_TIMEOUT_MS = 10000;
 let TCP_CONNECT_RETRIES = parseInt(parseArgValue('tcp-retries', null, '5'), 10);
 let TCP_RETRY_DELAY_MS = parseInt(parseArgValue('tcp-retry-delay', null, '500'), 10);
 let TUI_ENABLED = !NO_TUI && !JSON_MODE && process.stdout.isTTY;
 let CLOSE_ACTIVE_STREAM_TIMEOUT_MS = 5000;
-let IGNORE_CRITICAL_UPDATES = parseArgFlag('ignore-critical-updates', null);
+let SKIP_UPDATE_CHECK = parseArgFlag('skip-update-check', null);
 
 function printHelpAndExit() {
   console.log(`
@@ -72,7 +74,9 @@ Options:
       --kbps <n>                Simple throttle per stream (0=unlimited)
       --tcp-retries <n>         TCP connect retry attempts (default: 5)
       --tcp-retry-delay <ms>    Delay between retries (default: 500)
-        --no-tui                  Disable the terminal UI
+      --no-tui                  Disable the terminal UI
+      --no-fancy-logs           Disable colored and formatted logs (implies --no-tui)
+      --skip-update-check       Don't check for updates on startup
   -h, --help                    Show this help
 
 Examples:
@@ -123,7 +127,7 @@ if (mode === 'client' && protocol === 'both') {
 // Logging
 function nowIso() { return new Date().toISOString(); }
 function color(text, c) {
-  if (JSON_MODE || !process.stdout.isTTY) return text;
+  if (JSON_MODE || !process.stdout.isTTY || NO_FANCY_LOGS) return text;
   return `\x1b[${c}m${text}\x1b[0m`;
 }
 function formatBytes(n) {
@@ -388,6 +392,7 @@ function visibleLength(text) {
 }
 
 function startSpinner(message) {
+  if (NO_FANCY_LOGS) console.log(`[WAIT] ${message}`); return;
   if (JSON_MODE || !process.stdout.isTTY) return;
   if (TUI_ENABLED) {
     tuiSpinnerMessage = message;
@@ -523,107 +528,111 @@ if (mode === 'host' && protocol !== 'udp') {
   testConn.once('connect', () => testConn.destroy());
 }
 
-if (mode === 'client') startSpinner(`locating host peers with bridge ID "${bridgeId}"`);
-else startSpinner(`waiting for P2P connections`);
-
 let STOP_EXECUTION = false;
 
 // ------------------------- Version Check -------------------------
 // this is kinda spaghetti code hell but whatever, it works.
 
-https.get(VERSION_CHECK_URL, (res) => {
-  let data = '';
-  res.on('data', chunk => data += chunk);
-  res.on('end', () => {
-    const versionBlocks = data.trim().split("\n----------\n").map(block => block.trim()).filter(Boolean);
+if (!SKIP_UPDATE_CHECK) {
+  startSpinner(`checking for updates...`);
+  https.get(VERSION_CHECK_URL, (res) => {
+    let data = '';
+    res.on('data', chunk => data += chunk);
+    res.on('end', () => {
+      const versionBlocks = data.trim().split("\n----------\n").map(block => block.trim()).filter(Boolean);
 
-    if (!versionBlocks.length) {
-      stopSpinner(); warn('Could not retrieve remote version information.');
-      mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
-      return;
-    }
-
-    function parseVersionArray(ver) {
-      return String(ver).split("-")[0].split('.').map(x => parseInt(x, 10));
-    }
-
-    function compareVersionArrays(a, b) {
-      const len = Math.max(a.length, b.length);
-      for (let i = 0; i < len; i++) {
-        const ai = Number.isFinite(a[i]) ? a[i] : 0;
-        const bi = Number.isFinite(b[i]) ? b[i] : 0;
-        if (ai > bi) return 1;
-        if (ai < bi) return -1;
+      if (!versionBlocks.length) {
+        stopSpinner(); warn('Could not retrieve remote version information.');
+        mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
+        return;
       }
-      return 0;
-    }
 
-    function formatChangelogBlock(version, lines) {
-      const cleaned = lines.map(line => line.trim()).filter(Boolean);
-      if (!cleaned.length) return `${version}\n        (no release notes provided)`;
-      return `${version}\n        ${cleaned.join('\n        ')}`;
-    }
+      function parseVersionArray(ver) {
+        return String(ver).split("-")[0].split('.').map(x => parseInt(x, 10));
+      }
 
-    const remoteVersion = versionBlocks[0].split("\n").map(line => line.trim()).filter(Boolean);
-    const remoteVerNum = parseVersionArray(remoteVersion[0]);
-    const localVerNum = parseVersionArray(VERSION);
+      function compareVersionArrays(a, b) {
+        const len = Math.max(a.length, b.length);
+        for (let i = 0; i < len; i++) {
+          const ai = Number.isFinite(a[i]) ? a[i] : 0;
+          const bi = Number.isFinite(b[i]) ? b[i] : 0;
+          if (ai > bi) return 1;
+          if (ai < bi) return -1;
+        }
+        return 0;
+      }
 
-    if (remoteVerNum.some(isNaN) || localVerNum.some(isNaN)) {
-      stopSpinner(); warn('Received invalid version information from server.');
-      mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
-      return;
-    }
+      function formatChangelogBlock(version, lines) {
+        const cleaned = lines.map(line => line.trim()).filter(Boolean);
+        if (!cleaned.length) return `${version}\n        (no release notes provided)`;
+        return `${version}\n        ${cleaned.join('\n        ')}`;
+      }
 
-    const cmp = compareVersionArrays(remoteVerNum, localVerNum);
-    const newerBlocks = versionBlocks
-      .map(block => block.split("\n").map(line => line.trim()).filter(Boolean))
-      .filter(blockLines => blockLines.length > 0 && compareVersionArrays(parseVersionArray(blockLines[0]), localVerNum) > 0);
+      const remoteVersion = versionBlocks[0].split("\n").map(line => line.trim()).filter(Boolean);
+      const remoteVerNum = parseVersionArray(remoteVersion[0]);
+      const localVerNum = parseVersionArray(VERSION);
 
-    const newerVersions = newerBlocks.map(blockLines => formatChangelogBlock(blockLines[0], blockLines.slice(1)));
+      if (remoteVerNum.some(isNaN) || localVerNum.some(isNaN)) {
+        stopSpinner(); warn('Received invalid version information from server.');
+        mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
+        return;
+      }
 
-    // check for versions with "[CRITICAL]" in the notes and warn about them regardless of semver if we're on an older version.
-    const hasCritical = newerBlocks.some(blockLines => {
-      const notes = (blockLines.slice(1) || []).map(l => String(l).trim()).filter(Boolean);
-      return notes.some(line => line.includes('[CRITICAL]'));
-    });
+      const cmp = compareVersionArrays(remoteVerNum, localVerNum);
+      const newerBlocks = versionBlocks
+        .map(block => block.split("\n").map(line => line.trim()).filter(Boolean))
+        .filter(blockLines => blockLines.length > 0 && compareVersionArrays(parseVersionArray(blockLines[0]), localVerNum) > 0);
 
-    if (hasCritical) {
-      stopSpinner();
-      criticalVersionWarning(`A critical (most likely security) update (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
-      criticalVersionWarning('Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
-      if (newerVersions.length > 0) criticalVersionWarning(`Changelog: \n        ${newerVersions.join('\n        ----------\n        ')}`);
-      if (!IGNORE_CRITICAL_UPDATES) {
-        criticalVersionWarning('Execution will not continue. If you want to continue anyway, use --ignore-critical-updates flag (not recommended).');
+      const newerVersions = newerBlocks.map(blockLines => formatChangelogBlock(blockLines[0], blockLines.slice(1)));
+
+      // check for versions with "[CRITICAL]" in the notes and warn about them regardless of semver if we're on an older version.
+      const hasCritical = newerBlocks.some(blockLines => {
+        const notes = (blockLines.slice(1) || []).map(l => String(l).trim()).filter(Boolean);
+        return notes.some(line => line.includes('[CRITICAL]'));
+      });
+
+      if (hasCritical) {
+        stopSpinner();
+        criticalVersionWarning(`A critical (most likely security) update (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
+        criticalVersionWarning('Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
+        if (newerVersions.length > 0) criticalVersionWarning(`Changelog: \n        ${newerVersions.join('\n        ----------\n        ')}`);
+        criticalVersionWarning('Execution will not continue. If you want to continue anyway, use --skip-update-check flag (not recommended).');
         if (TUI_ENABLED) {
           stopExecutionForCriticalUpdate();
           return;
         } else {
           gracefulExit(0);
         }
-      } else {
-        criticalVersionWarning('You have chosen to ignore critical update warnings. Make sure you understand the risks.');
-        mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
-        return;
       }
-    }
 
-    if (cmp > 0) {
-      stopSpinner();
-      update(`A new version (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
-      update('Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
-      if (newerVersions.length > 0) update(`Changelog:\n        ${newerVersions.join('\n        ----------\n        ')}`);
-      mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
-    } else if (cmp < 0) {
-      stopSpinner();
-      update(`You are running a newer version (${VERSION}) than the latest release (${remoteVersion[0]}). thank you for remembering to change the version in the code.`);
-      if (newerVersions.length > 0) update(`Changelog for newer releases:\n        ${newerVersions.join('\n        ----------\n        ')}`);
-      mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
-    }
+      if (cmp > 0) {
+        stopSpinner();
+        update(`A new version (${remoteVersion[0]}) is available! You are using ${VERSION}.`);
+        update('Visit https://github.com/Lawtro37/nat-bridge/releases to download the latest version.');
+        if (newerVersions.length > 0) update(`Changelog:\n        ${newerVersions.join('\n        ----------\n        ')}`);
+        mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
+      } else if (cmp < 0) {
+        stopSpinner();
+        update(`You are running a newer version (${VERSION}) than the latest release (${remoteVersion[0]}). thank you for remembering to change the version in the code.`);
+        if (newerVersions.length > 0) update(`Changelog for newer releases:\n        ${newerVersions.join('\n        ----------\n        ')}`);
+        mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
+      } else {
+        stopSpinner();
+        if (newerVersions.length > 0) update(`Changelog for newer releases:\n        ${newerVersions.join('\n        ----------\n        ')}`);
+        mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
+      }
+    });
+  }).on('error', () => {
+    stopSpinner(); warn('Could not check for updates.');
+    mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
   });
-}).on('error', () => {
-  stopSpinner(); warn('Could not check for updates.');
-  mode === 'client' ? startSpinner(`locating host peers with the bridge ID "${bridgeId}"...`) : startSpinner(`waiting for P2P connections...`);
-});
+} else {
+  update('Skipping update check (disabled by --skip-update-check)');
+  warn('Make sure to check for updates regularly to receive important security fixes and new features: https://github.com/Lawtro37/nat-bridge/releases');
+}
+
+// if (mode === 'client') startSpinner(`locating host peers with bridge ID "${bridgeId}"`);
+// else startSpinner(`waiting for P2P connections`);
 
 // ------------------------- Metrics / Status -------------------------
 
