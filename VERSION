@@ -1,3 +1,12 @@
+1.2.1
+- Fixed not being able to scroll through logs in TUI
+- Revamped the update checking system
+- Added and indicator when waiting for the streams to close
+- Added the ability to disable any fancy logging
+- Made launcher resize to fit when opening advanced options
+- Switch node packager/builder back to pgk
+- Minor bug fixes
+----------
 1.2.0
 - Updated CLI to have a terminal UI that can be optionally disabled with the `--no-ui` flag
 - Updated update checking logic

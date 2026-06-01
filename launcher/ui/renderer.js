@@ -21,6 +21,8 @@ const el = {
   tcpRetryDelay: document.getElementById("tcpRetryDelay"),
   runBtn: document.getElementById("runBtn"),
   statusLabel: document.getElementById("statusLabel"),
+  skipUpdateCheck: document.getElementById("skipUpdateCheck"),
+  noFancyLogs: document.getElementById("noFancyLogs"),
 };
 
 let running = false;
@@ -70,6 +72,8 @@ function getPayload() {
     kbps: el.kbps.value.trim(),
     tcpRetries: el.tcpRetries.value.trim(),
     tcpRetryDelay: el.tcpRetryDelay.value.trim(),
+    skipUpdateCheck: el.skipUpdateCheck.checked,
+    noFancyLogs: el.noFancyLogs.checked,
   };
 }
 
@@ -78,6 +82,7 @@ el.mode.addEventListener("change", refreshProtocol);
 
 el.advancedSelect.addEventListener("change", () => {
   advancedOpen = el.advancedSelect.value === "show";
+  window.launcherApi.openAdvanced(advancedOpen);
   refreshAdvanced();
 });
 
