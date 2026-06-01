@@ -211,6 +211,8 @@ function buildBridgeArgs(payload) {
     if (payload.kbps) args.push("--kbps", String(payload.kbps));
     if (payload.tcpRetries) args.push("--tcp-retries", String(payload.tcpRetries));
     if (payload.tcpRetryDelay) args.push("--tcp-retry-delay", String(payload.tcpRetryDelay));
+    if (payload.skipUpdateCheck) args.push("--skip-update-check");
+    if (payload.noFancyLogs) args.push("--no-fancy-logs");
 
     return args;
 }
@@ -281,9 +283,9 @@ function createMainWindow() {
     const systemBg = nativeTheme.shouldUseDarkColors ? "#1f1f1f" : "#f0f0f0";
     mainWindow = new BrowserWindow({
         width: 645,
-        height: 460,
+        height: 310,
         minWidth: 645,
-        minHeight: 460,
+        minHeight: 310,
         title: "NAT-bridge Launcher",
         backgroundColor: systemBg,
         webPreferences: {
@@ -299,6 +301,15 @@ function createMainWindow() {
         mainWindow = null;
     });
 }
+
+ipcMain.handle("launcher:openAdvanced", (_event, open) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (open && mainWindow.getSize()[1] < 530) {
+        mainWindow.setSize(mainWindow.getSize()[0], 530);
+    } else if (!open && mainWindow.getSize()[1] === 530) {
+        mainWindow.setSize(mainWindow.getSize()[0], 310);
+    }
+});
 
 ipcMain.handle("launcher:browseConfig", async () => {
     const picked = await dialog.showOpenDialog({
