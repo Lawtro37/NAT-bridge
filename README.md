@@ -1,66 +1,156 @@
-![NAT-Bridge Logo](https://raw.githubusercontent.com/Lawtro37/NAT-bridge/refs/heads/dev/icons/NAT-bridge-icon-8.png)
+<a id="readme-top"></a>
 
-# NAT-bridge
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![Unlicense License][license-shield]][license-url]
 
-A sweet and simple single command Node.js CLI tool for tunneling TCP and UDP traffic over a peer-to-peer (P2P) network using [Hyperswarm](https://github.com/hyperswarm/hyperswarm). NAT-bridge allows you to expose local services to remote clients, bypassing NAT/firewall restrictions (no need for port fowarding).
+<!-- LOGO -->
+<br />
+<div align="center">
+  <a href="https://raw.githubusercontent.com/Lawtro37/NAT-bridge/refs/heads/dev/icons/NAT-bridge-icon-8.png">
+    <img src="https://raw.githubusercontent.com/Lawtro37/NAT-bridge/refs/heads/dev/icons/NAT-bridge-icon-8.png" alt="Logo" width="250" height="250">
+  </a>
 
-**Note:** I have not updated this readme in ages and I'm too lazy to update it right now. Some stuff in here may be inaccurate. I'm sure you'll figure it out though.
+  <h3 align="center">NAT-Bridge</h3>
 
----
+  <p align="center">
+    Network through P2P with no port fowarding
+    <br />
+    <a href="https://github.com/Lawtro37/NAT-bridge/releases/tag/v1.2.1"><strong>Latest Release »</strong></a>
+    <br />
+    <br />
+    <a href="https://github.com/Lawtro37/NAT-bridge/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
+    &middot;
+    <a href="https://github.com/Lawtro37/NAT-bridge/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
+  </p>
+</div>
 
-## Features
 
-- Tunnel **TCP**, **UDP**, or **both** protocols.
-- Peer-to-peer connectivity via Hyperswarm (no central server).
-- Multiplexing for multiple simultaneous streams.
-- One command simple CLI usage.
-- Works behind NAT/firewall **without** port forwarding.
 
----
+<!-- TABLE OF CONTENTS -->
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li>
+      <a href="#about-">About</a>
+      <ul>
+        <li><a href="#built-with">Built With</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#instructions-to-run">Instructions to Run</a></li>
+        <li><a href="#building-to-executable">Building to Executable</a></li>
+      </ul>
+    </li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#license">License</a></li>
+  </ol>
+</details>
 
-## Limitations
-- Protocols that require complex NAT traversal (like STUN/TURN or Multicast) probably wont work correctly.
-- ICMP (used by ping) is **not** supported (NAT-bridge is TCP/UDP only).
-- Encrypted protocols (HTTPS, SSH) work transparently, encryption is handled by the tunneled service, **not** NAT-bridge.
 
-## Installation
 
-```bash
-npm install
-```
+<!-- ABOUT -->
+## About
 
-## Windows EXE Build
+A sweet and simple single command Node.js CLI tool for tunneling TCP and UDP traffic over a peer-to-peer (P2P) network using Hyperswarm. NAT-bridge allows you to expose local services to remote clients, bypassing NAT/firewall restrictions (no need for port fowarding).
 
-The standalone executable is built with `caxa`.
+Use Cases:
+* You want to play minecraft with your friend but dont want to pay for a dedicated server or port foward.
+* You Are working on a website and want testers to quickly be able to acsess it.
+* You only want to expose a port to specific computers for networking.
 
+NAT-bridge can be used for many things not descussed here.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+### Built With
+
+
+* [![Node][Node.js]][Node-url]
+* [![Hyperswarm](https://img.shields.io/badge/Hyperswarm-yellow?style=for-the-badge)](https://github.com/hyperswarm)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+<!-- GETTING STARTED -->
+## Getting Started
+
+Hyperswarm is made with node.js and can be run as such. However, if you prefer, It can also be downloaded as a windows executable [here](https://github.com/Lawtro37/NAT-bridge/releases/) in which case it should just run out of the box.
+
+### Prerequisites
+For this you will need the following:
+* node
+  ```bash
+  winget install OpenJS.NodeJS
+  ```
+* npm
+  ```bash
+  npm install npm@latest -g
+  ```
+
+### Instructions to Run
+Follow these steps to run NAT-bridge
+
+1. Clone the repo
+   ```bash
+   git clone https://github.com/Lawtro37/NAT-bridge.git
+   ```
+2. Install NPM packages
+   ```bash
+   npm install
+   ```
+3. Run this command
+   ```bash
+   node main.js
+   ```
+4. If you prefer you can run the launcher GUI via this command
+   ```bash
+   npm run launcher
+   ```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+### Building to Executable
+Follow these steps if you wish to build NAT-Bidge to an executable
+
+#### Standalone EXE
 ```bash
 npm run build
 ```
 
-This produces `nat-bridge.exe` in the project root and copies it to `dist/nat-bridge.exe` for the packaging flow.
-
-If you want the full release bundle, including the launcher and example configurations, run:
-
+#### Launcher EXE
 ```bash
-npm run release
+npm run build:launcher
 ```
+Note that the launcher must be in the same or child directory as a `nat-bridge.exe` executable
 
-## GUI Launcher
+There are currently no built in scripts for building to an executable for any operating system other than windows, though it can be done manualy through `pkg`.
 
-```bash
-npm run launcher
-```
-
-Opens a simple Electron desktop launcher (Windows-style UI) where you can configure host/client mode, protocol, ports, advanced options, and launch `nat-bridge` with live process logs.
-
----
-
+<!-- USAGE EXAMPLES -->
 ## Usage
+To connect a device to another they must have the same bridge id. The "host" machine exposes a specified port with `-e` or `--expose`. Any "client" machines can connect to the host over peer to peer if they have the same bridge id. The "client can specify a port on their machine with `-l` or `--listen` that the tunnel will listen on.
+
+Note that anyone with the same bridge id can connect to your device if you machine is operating as a "host", unless you specify a secret with `--secret`.
+Two hosts on the same bridge id can cause a variety of issues and may allow malicous hosts to trick "clients" inteded for your machine into to conneting to theirs.
+
+No encryption is provided by NAT-bridge, that is the responsibility of the protocal running over the bridge.
 
 ```bash
-nat-bridge <host|client> <bridge-id> [options]
+node main.js <host|client> <bridge-id> [options]
 ```
-
+or with a configuration
+```bash
+node main.js config <config-file>
+```
 ### Options
 
 | Option                        | Description                                 | Default   |
@@ -68,6 +158,7 @@ nat-bridge <host|client> <bridge-id> [options]
 | `-e`, `--expose <port>`       | Port to expose on host                      | 8080      |
 | `-l`, `--listen <port>`       | Port to listen on client                    | 5000      |
 | `-p`, `--protocol <type>`     | Protocol to tunnel: `tcp`, `udp`, `both`    | tcp       |
+| `-w`, `--warnings`            | Show common disconnect warnings             |           |
 | `-v`, `--verbose`             | Enable verbose logging                      |           |
 | `-h`, `--help`                | Show help                                   |           |
 |       `--json`                | Structured JSON logs (disables spinner)     |           |
@@ -77,12 +168,13 @@ nat-bridge <host|client> <bridge-id> [options]
 |       `--kbps <n>`            | Simple throttle per stream (0=unlimited)    | unlimited |
 |       `--tcp-retries <n>`     | TCP connect retry attempts                  | 5         |
 |       `--tcp-retry-delay <ms>`| Delay between retries (in miliseconds)      | 500ms     |
+|       `--no-tui`              | Disable the terminal UI                     |           |
+|       `--no-fancy-logs `      | Disable colored and formatted logs          |           |
+|       `--skip-update-check`   | Don't check for updates on startup          |           |
 
----
+#### Examples
 
-### Examples
-
-#### Web Server Access
+##### Web Server Access
 ```bash
 # Host: Share your local web server (localhost:3000) 
 nat-bridge host webserver --expose 3000 --protocol tcp --verbose
@@ -92,7 +184,7 @@ nat-bridge client webserver --listen 8080 --protocol tcp
 # Now visit http://localhost:8080 to access the remote server
 ```
 
-#### Game Server with Authentication
+##### Game Server with Authentication
 ```bash
 # Host: Expose Minecraft server with security
 nat-bridge host minecraft --expose 25565 --protocol both --secret "gamenight2024"
@@ -102,7 +194,7 @@ nat-bridge client minecraft --listen 25565 --protocol tcp --secret "gamenight202
 # Connect your Minecraft client to localhost:25565
 ```
 
-#### Database Tunneling
+##### Database Tunneling
 ```bash
 # Host: Expose PostgreSQL database with monitoring
 nat-bridge host database --expose 5432 --protocol tcp --status 9999 --max-streams 5
@@ -113,7 +205,7 @@ nat-bridge client database --listen 5432 --protocol tcp
 # Check connection status at http://localhost:9999/status
 ```
 
-#### Home Media Server
+##### Home Media Server
 ```bash
 # Host: Share Plex/Jellyfin server with bandwidth limiting
 nat-bridge host mediaserver --expose 32400 --protocol tcp --kbps 5000
@@ -122,7 +214,7 @@ nat-bridge host mediaserver --expose 32400 --protocol tcp --kbps 5000
 nat-bridge client mediaserver --listen 32400 --protocol tcp
 ```
 
-#### Configuration File Example
+##### Configuration File Example
 ```bash
 # Create config.json:
 {
@@ -139,80 +231,59 @@ nat-bridge client mediaserver --listen 32400 --protocol tcp
 nat-bridge config ./config.json
 ```
 
----
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-## How It Works
+<!-- ROADMAP -->
+## Roadmap
 
-- **Host mode**: Exposes a local service (TCP/UDP) to the P2P network.
-- **Client mode**: Connects to the host via P2P and forwards traffic to/from a local port.
-- Uses a shared `bridge-id` as the P2P topic for discovery.
-- Multiplexing allows multiple simultaneous connections over a single P2P link.
+- [x] Add a GUI Launcher
+- [x] Add a terminal UI
+- [ ] Refactor so everything isnt in one file
+- [ ] Add more visuals to the TUI
+    - [ ] Upload and download visual graph
+- [ ] Fix that bug where streams refuse to die when exiting for some reason
+- [ ] Rework the handshake protocal
+    - [ ] Rework the handshake protocal
+    - [ ] Add Legacy Support
 
----
+See the [open issues](https://github.com/Lawtro37/NAT-bridge/issues) for a full list of proposed features (and known issues).
 
-## Requirements
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-- Node.js v14+
-- [Hyperswarm](https://github.com/hyperswarm/hyperswarm)
-- [multiplex](https://github.com/maxogden/multiplex) 
-- [pump](https://github.com/mafintosh/pump)
-
-Install dependencies with:
-
-```bash
-npm install hyperswarm multiplex pump
-```
-
----
-
-## Troubleshooting
-
-- **No connection established:**  
-  Ensure both the host and the client use the same `bridge-id` and protocol.
-- **Port already in use:**  
-  Change the `--listen` port to an available one.
-- **No service running on host:**  
-  Make sure the service you want to expose is running on the host machine and at the specified port.
-- **Firewall issues:**  
-  NAT-bridge works behind most NAT/firewalls, but some restrictive networks may block P2P connections.
-
----
-
-## Security
-
-- **No authentication or encryption is provided by default.**
-- It is up to you or the protocol tunneled through NAT-bridge to encrypt data.
-- Use on trusted networks or add your own security layer if needed (e.g., run a VPN or SSH tunnel over NAT-bridge).
-- Anyone with the same `bridge-id` can connect; treat the `bridge-id` as a shared secret.
-
----
-
-## Notes
-- the warning `[WARN] Socket error: connection reset by peer` is common and often harmless.
-- if you get the warning `[WARN] [CONFLICT] Another host attempted to connect. Ignoring.` you may want to change your bridge ID.
-
----
-
-## More Info
-
-- **Multiple clients:**  
-  Multiple clients can connect to the same host using the same `bridge-id`.
-- **Changing protocols:**  
-  You can tunnel both TCP and UDP simultaneously by using `--protocol both`.
-- **Custom topics:**  
-  The `bridge-id` is used to generate a unique P2P topic. Use a random or hard-to-guess string for privacy.
-
----
-
+<!-- CONTRIBUTING -->
 ## Contributing
 
-Feel free to fork, file issues, and submit pull requests!
-Any contributions that help make NAT-bridge more robust, secure, or user-friendly are welcome.
+Feel free to fork, file issues, and submit pull requests! Any contributions that help make NAT-bridge more robust, secure, or user-friendly are welcome.
 
----
+### Top contributors:
 
-#### made by Lawtro
+<a href="https://github.com/Lawtro37/NAT-bridge/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Lawtro37/NAT-bridge" alt="contrib.rocks image" />
+</a>
 
-##### GPL-3.0 license
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-##
+<!-- LICENSE -->
+## License
+
+Distributed under the **GPL-3.0** License. See the `LICENSE` file for more information.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+##### Made by Lawtro
+
+<!-- MARKDOWN LINKS & IMAGES -->
+<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
+[contributors-shield]: https://img.shields.io/github/contributors/Lawtro37/NAT-bridge.svg?style=for-the-badge
+[contributors-url]: https://github.com/Lawtro37/NAT-bridge/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/Lawtro37/NAT-bridge.svg?style=for-the-badge
+[forks-url]: https://github.com/Lawtro37/NAT-bridge/network/members
+[stars-shield]: https://img.shields.io/github/stars/Lawtro37/NAT-bridge.svg?style=for-the-badge
+[stars-url]: https://github.com/Lawtro37/NAT-bridge/stargazers
+[issues-shield]: https://img.shields.io/github/issues/Lawtro37/NAT-bridge.svg?style=for-the-badge
+[issues-url]: https://github.com/Lawtro37/NAT-bridge/issues
+[license-shield]: https://img.shields.io/github/license/Lawtro37/NAT-bridge.svg?style=for-the-badge
+[license-url]: https://github.com/Lawtro37/NAT-bridge/blob/master/LICENSE.txt
+[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
+[Node.js]: https://img.shields.io/badge/node.js-339933?style=for-the-badge&logo=Node.js&logoColor=white
+[Node-url]: https://nodejs.org/
