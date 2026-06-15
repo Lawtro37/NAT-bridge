@@ -18,7 +18,7 @@
   <p align="center">
     Network through P2P with no port fowarding
     <br />
-    <a href="https://github.com/Lawtro37/NAT-bridge/releases/tag/v1.2.1"><strong>Latest Release »</strong></a>
+    <a href="https://github.com/Lawtro37/NAT-bridge/releases/tag/v1.2.2"><strong>Latest Release »</strong></a>
     <br />
     <br />
     <a href="https://github.com/Lawtro37/NAT-bridge/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
