@@ -11,8 +11,7 @@ const el = {
   verbose: document.getElementById("verbose"),
   warnings: document.getElementById("warnings"),
   noTui: document.getElementById("noTui"),
-  advancedSelect: document.getElementById("advancedSelect"),
-  advancedFieldset: document.getElementById("advancedFieldset"),
+  advancedOptions: document.getElementById("advancedOptions"),
   secret: document.getElementById("secret"),
   status: document.getElementById("status"),
   maxStreams: document.getElementById("maxStreams"),
@@ -23,6 +22,7 @@ const el = {
   statusLabel: document.getElementById("statusLabel"),
   skipUpdateCheck: document.getElementById("skipUpdateCheck"),
   noFancyLogs: document.getElementById("noFancyLogs"),
+
 };
 
 let running = false;
@@ -45,7 +45,7 @@ function refreshProtocol() {
 }
 
 function refreshAdvanced() {
-  el.advancedFieldset.classList.toggle("hidden", !advancedOpen);
+  el.advancedOptions.open = advancedOpen;
 }
 
 function setStatus(status, isRunning, message) {
@@ -80,8 +80,8 @@ function getPayload() {
 el.loadFromFile.addEventListener("change", refreshVisibility);
 el.mode.addEventListener("change", refreshProtocol);
 
-el.advancedSelect.addEventListener("change", () => {
-  advancedOpen = el.advancedSelect.value === "show";
+el.advancedOptions.addEventListener("toggle", () => {
+  advancedOpen = el.advancedOptions.open;
   window.launcherApi.openAdvanced(advancedOpen);
   refreshAdvanced();
 });
@@ -105,6 +105,6 @@ window.launcherApi.onStatus((p) => setStatus(p.status, p.running, p.message));
 
 refreshVisibility();
 refreshProtocol();
-el.advancedSelect.value = "hide";
+el.advancedOptions.open = false;
 refreshAdvanced();
 setStatus("idle", false);

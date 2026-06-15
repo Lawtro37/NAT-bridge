@@ -121,12 +121,6 @@ button {
   width: 110px;
 }
 
-#advancedBtn {
-  width: 32px;
-  min-width: 32px;
-  padding: 0;
-}
-
 .advanced {
   border: 1px solid var(--control-border);
   padding: 8px;
@@ -148,3 +142,16 @@ button {
   font-weight: 600;
 }
 
+details {
+  width: 90%;
+  border: 1px solid var(--control-border);
+  padding: 8px;
+  padding-bottom: 12px;
+  margin: 0 0 8px;
+  background: var(--panel-bg);
+}
+
+details summary {
+  font-weight: 600;
+  cursor: pointer;
+}

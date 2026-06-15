@@ -39,15 +39,11 @@
         <label class="check-item"><input type="checkbox" id="verbose" /> <span>Verbose logging</span></label>
         <label class="check-item"><input type="checkbox" id="warnings" /> <span>Show expected warnings</span></label>
         <label class="check-item"><input type="checkbox" id="noTui" /> <span>Disable TUI</span></label>
-        <label class="field-label" for="advancedSelect">Advanced options</label>
-        <select id="advancedSelect">
-          <option value="hide">Hidden</option>
-          <option value="show">Shown</option>
-        </select>
       </div>
 
-      <fieldset id="advancedFieldset" class="advanced hidden">
-        <legend>Advanced options</legend>
+      <details id="advancedOptions">
+        <summary>Advanced options</summary>
+        <br>
         <div class="row">
           <label class="field-label" for="secret">Secret</label>
           <input id="secret" type="text" />
@@ -72,7 +68,7 @@
           <label class="field-label" for="noFancyLogs">No fancy logs</label>
           <input id="noFancyLogs" type="checkbox" />
         </div>
-      </fieldset>
+      </details>
     </div>
 
     <div class="row actions">
