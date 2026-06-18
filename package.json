@@ -1,6 +1,6 @@
 {
   "name": "nat-bridge",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "Peer-to-peer TCP/UDP tunnel over Hyperswarm. Bypass NAT/firewall without port forwarding.",
   "author": "Lawtro37",
   "license": "GPL-3.0-only",
@@ -14,6 +14,7 @@
     "release": "npm run build && npm run build:launcher && node scripts/assemble_release.js"
   },
   "dependencies": {
+    "@webviewjs/webview": "^0.1.4",
     "blessed": "^0.1.81",
     "electron": "^41.1.1",
     "hyperswarm": "^4.11.7",
@@ -21,8 +22,8 @@
     "pump": "^3.0.3"
   },
   "devDependencies": {
-    "pkg": "^5.8.0",
     "electron-packager": "^17.1.1",
+    "pkg": "^5.8.0",
     "rcedit": "^5.0.2"
   },
   "pkg": {
