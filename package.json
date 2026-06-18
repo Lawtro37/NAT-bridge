@@ -1,6 +1,6 @@
 {
   "name": "nat-bridge",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "Peer-to-peer TCP/UDP tunnel over Hyperswarm. Bypass NAT/firewall without port forwarding.",
   "author": "Lawtro37",
   "license": "GPL-3.0-only",
