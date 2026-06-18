@@ -16,8 +16,10 @@
 
     <div class="row" id="configRow">
       <label class="field-label" for="configFile">Config file</label>
-      <input id="configFile" type="text" />
-      <button id="browseBtn" type="button">Browse...</button>
+      <label for="browseBtn" class="browse-btn">Upload File</label>
+      <input type="file" id="browseBtn" accept=".json" />
+
+      <input id="configFile" type="text" class="browse-path" placeholder="Config file path" />
     </div>
 
     <div id="interactiveSection">
@@ -74,6 +76,7 @@
     <div class="row actions">
       <button id="runBtn" type="button">Start</button>
       <span id="statusLabel">Status: idle</span>
+      <span id="messageLabel"></span>
     </div>
   </div>
 
