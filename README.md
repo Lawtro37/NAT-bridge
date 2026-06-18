@@ -245,6 +245,7 @@ nat-bridge config ./config.json
 - [ ] Rework the handshake protocal
     - [ ] Rework the handshake protocal
     - [ ] Add Legacy Support
+- [ ] Port to rust
 
 See the [open issues](https://github.com/Lawtro37/NAT-bridge/issues) for a full list of proposed features (and known issues).
 
