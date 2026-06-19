@@ -1,4 +1,4 @@
-const { Application, Theme, WebviewApplicationEvent } = require("@webviewjs/webview");
+const { Application, Theme, WebviewApplicationEvent, FileDialogOptions, FileFilter } = require("@webviewjs/webview");
 const { spawnSync, spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
@@ -311,13 +311,15 @@ function createMainWindow() {
 	fs.mkdirSync(webviewData, { recursive: true });
 
 	process.env.WEBVIEW2_USER_DATA_FOLDER = webviewData;
+	process.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--allow-file-access-from-files --allow-file-access";
 
 	app = new Application();
 
 	const window = app.createBrowserWindow({
 		title: "NAT-bridge Launcher",
-		width: 1285,
-		height: 1000,
+		logical: true,
+		width: 642.5,
+		height: 300,
 	});
 	window.setWindowIcon(path.join(__dirname, "..", "icons", "icon.ico"), 256, 256);
 	window.setMaximizable(false);
@@ -330,7 +332,7 @@ function createMainWindow() {
 		html: getHtml(uiPath, path.join(__dirname, "ui")),
 	});
 
-	mainWebview.openDevtools(true);
+	// mainWebview.openDevtools(true);
 
 	mainWebview.onIpcMessage((data) => {
 		if (!data) return;
@@ -372,8 +374,14 @@ function createMainWindow() {
 				}
 			} else if (data.type === "heightChange") {
 				// console.log(`Height change requested: ${data.payload}`);
-				// Im just gona wait until they release this, they have a new commit that adds a setSize method to the webview that hasn't been released yet.
-				// mainWindow.setSize(1285, data.payload * 2);
+				mainWindow.setSize(642.5, data.payload, true);
+			} else if (data.type === "openFileDialog") {
+				let result = window.openFileDialog({ multiple: false, title: "Select NAT-bridge Configuration File", filters: [{ name: "JSON Files", extensions: ["json"] }] });
+				if (result && result[0]) {
+					mainWebview.evaluateScript(`
+						document.getElementById("configFile").value = ${JSON.stringify(result[0])};
+					`);
+				}
 			}
 		} catch (error) {
 			console.error("Error handling IPC message:", error);
