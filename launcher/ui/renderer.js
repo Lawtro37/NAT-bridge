@@ -55,7 +55,7 @@ function refreshProtocol() {
 function setStatus(status, isRunning, message) {
   running = !!isRunning;
 
-  console.log(`Status update: ${status} (${message || "No message"}), running: ${running}`);
+  // console.log(`Status update: ${status} (${message || "No message"}), running: ${running}`);
   el.statusLabel.textContent = `Status: ${status}`;
   el.runBtn.textContent = running ? "Stop" : "Start";
   el.messageLabel.textContent = message || "";
@@ -90,19 +90,14 @@ el.mode.addEventListener("change", refreshProtocol);
 
 const resizeObserver = new ResizeObserver((entries) => {
   for (let entry of entries) {
-    sendIpc("heightChange", entry.contentRect.height);
+    // console.log(`Observed size change: ${entry.contentRect.width}x${entry.contentRect.height}`);
+    sendIpc("heightChange", document.getElementById("mainWindow").offsetHeight-5);
   }
 });
-resizeObserver.observe(document.body);
+resizeObserver.observe(document.getElementById("mainWindow"));
 
-el.browseBtn.addEventListener("change", (event) => {
-  const file = event.target.files[0];
-  if (file) {
-    el.configFile.value = file.path;
-    console.log(`Selected config file: ${file.path}`);
-  }
-  // this doesnt work because its a webview so it cant see the file path
-  // its i'll figure out a way to fix this later
+el.browseBtn.addEventListener("click", () => {
+  sendIpc("openFileDialog", null);
 });
 
 el.runBtn.addEventListener("click", () => {
@@ -122,7 +117,7 @@ el.advancedOptions.open = false;
 setStatus("idle", false);
 
 function sendIpc(type, payload) {
-  console.log(`Sending IPC: ${JSON.stringify({ type, payload })}`);
+  // console.log(`Sending IPC: ${JSON.stringify({ type, payload })}`);
   window.ipc.postMessage(JSON.stringify({ type, payload }));
 }
 
