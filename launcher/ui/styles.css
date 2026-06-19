@@ -35,7 +35,6 @@ html {
 }
 
 .window {
-  height: 100%;
   box-sizing: border-box;
   padding: 12px;
   display: flex;
