@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="window">
+  <div class="window" id="mainWindow">
     <div class="title">NAT-bridge Launcher</div>
 
     <div class="row">
@@ -16,8 +16,7 @@
 
     <div class="row" id="configRow">
       <label class="field-label" for="configFile">Config file</label>
-      <label for="browseBtn" class="browse-btn">Upload File</label>
-      <input type="file" id="browseBtn" accept=".json" />
+      <button id="browseBtn">Upload File</button>
 
       <input id="configFile" type="text" class="browse-path" placeholder="Config file path" />
     </div>
