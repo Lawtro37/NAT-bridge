@@ -1,32 +1,25 @@
 {
   "name": "nat-bridge",
-  "version": "1.2.0",
+  "version": "1.2.3",
   "description": "Peer-to-peer TCP/UDP tunnel over Hyperswarm. Bypass NAT/firewall without port forwarding.",
   "author": "Lawtro37",
   "license": "GPL-3.0-only",
   "homepage": "https://github.com/Lawtro37/nat-bridge",
   "repository": "github:Lawtro37/nat-bridge",
-  "bin": "main.js",
+  "main": "main.js",
   "scripts": {
     "launcher": "node ./launcher/nat-bridge-launcher.js",
-    "build": "node scripts/build_minimal_exe.js",
-    "build:launcher": "echo not implemented yet",
-    "release": "npm run build && npm run build:launcher && node scripts/assemble_release.js"
+    "build": "build.bat",
+    "build:launcher": "build-launcher.bat"
   },
   "dependencies": {
-    "@webviewjs/webview": "file:./static/webview",
     "blessed": "^0.1.81",
     "hyperswarm": "^4.11.7",
     "multiplex": "^6.7.0",
     "pump": "^3.0.3"
   },
   "devDependencies": {
-    "pkg": "^5.8.0",
+    "@cdxgen/caxa": "^3.0.3",
     "rcedit": "^5.0.2"
-  },
-  "pkg": {
-    "assets": [
-      "node_modules/blessed/**/*"
-    ]
   }
 }
