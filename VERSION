@@ -12,6 +12,7 @@
 - Added and indicator when waiting for the streams to close
 - Added the ability to disable any fancy logging
 - Made launcher resize to fit when opening advanced options
+- Added IP blacklist
 - Switch node packager/builder back to pgk
 - Minor bug fixes
 ----------
