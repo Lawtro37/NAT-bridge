@@ -1,6 +1,18 @@
 #!/usr/bin/env node
 'use strict';
 
+// Patch for pkg virtual file system module resolution error
+if (process.pkg) {
+  const Module = require('module');
+  const originalRequire = Module.prototype.require;
+  Module.prototype.require = function (id) {
+    if (id === 'events-universal') {
+      return originalRequire.call(this, 'events-universal/default.js');
+    }
+    return originalRequire.call(this, id);
+  };
+}
+
 const net = require('net');
 const dgram = require('dgram');
 const Hyperswarm = require('hyperswarm');
@@ -11,7 +23,7 @@ const http = require('http');
 const pump = require('pump');
 const { Transform } = require('stream');
 
-const VERSION = '1.2.2';
+const VERSION = '1.2.3';
 const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/NAT-bridge/refs/heads/main/VERSION';
 
 // ------------------------- CLI / Helpers -------------------------
@@ -601,7 +613,7 @@ if (!SKIP_UPDATE_CHECK) {
           stopExecutionForCriticalUpdate();
           return;
         } else {
-          gracefulExit(0);
+          gracefulExit(0, 'Critical update available');
         }
       }
 
@@ -1133,7 +1145,7 @@ swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' });
 
 swarm.on('error', (err) => {
   error(`Swarm error: ${err.message}`);
-  gracefulExit(1);
+  gracefulExit(1, err.message);
 });
 
 function handleSwarmClose() {
@@ -1202,7 +1214,7 @@ function stopExecutionForCriticalUpdate() {
   }
 }
 
-function gracefulExit(code = 0) {
+function gracefulExit(code = 0, error) {
   if (exiting) return;
   stopSpinner();
   info('Shutting down gracefully... (press Ctrl+C again to force exit)');
@@ -1256,7 +1268,11 @@ function gracefulExit(code = 0) {
       stopSpinner();
       info('Swarm closed');
       stopExitSpinner();
-      if (code !== 0 && TUI_ENABLED) printCrashLog();
+      if (code !== 0 && TUI_ENABLED) {
+        printCrashLog();
+        // set stderr
+        console.error(error ? color(`Error: ${error}`, '31') : 'Exited with error');
+      }
       process.exit(code);
     });
 
@@ -1265,7 +1281,11 @@ function gracefulExit(code = 0) {
       if (!swarmClosed) {
         stopSpinner();
         stopExitSpinner();
-        if (code !== 0 && TUI_ENABLED) printCrashLog();
+        if (code !== 0 && TUI_ENABLED) {
+          printCrashLog();
+          // set stderr
+          console.error((error ? color(`Error: ${error}`, '31') : 'Exited with error') + ' (swarm close timeout)');
+        }
         warn('Swarm close timeout reached, forcing exit...');
         process.exit(code);
       }
@@ -1282,6 +1302,6 @@ process.on('uncaughtException', (err) => {
   error(`Uncaught exception: ${err.message}`);
   if (VERBOSE) console.error(err.stack || err);
   enableExitKeypress();
-  gracefulExit(1);
+  gracefulExit(1, err.message);
 });
 process.on('exit', (code) => { if (!exiting) enableExitKeypress(); gracefulExit(code); });
