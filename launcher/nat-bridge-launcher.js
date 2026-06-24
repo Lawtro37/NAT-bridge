@@ -1,5 +1,5 @@
-const { Application, Theme, WebviewApplicationEvent, FileDialogOptions, FileFilter } = require("@webviewjs/webview");
-const { spawnSync, spawn } = require("child_process");
+const { Application, Theme, WebviewApplicationEvent, FileDialogOptions, FileFilter } = require("./static/@webviewjs/webview");
+const { execa, execaSync } = require("execa");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -20,7 +20,7 @@ function findNatBridgeExecutable() {
 		// also check the parent of the parent
 		path.resolve(__dirname, "..", "..", exeName),
 		path.resolve(process.cwd(), exeName),
-		path.resolve(process.cwd(), 'dist', exeName),
+		path.resolve(process.cwd(), 'bin', exeName),
 		path.join(path.dirname(process.execPath || ''), exeName),
 		// if nat-bridge is placed next to the app bundle
 		path.join(path.dirname(process.execPath || ''), '..', exeName),
@@ -36,7 +36,7 @@ function findNatBridgeExecutable() {
 
 	const cmd = isWin ? "where" : "which";
 	try {
-		const result = spawnSync(cmd, [exeName], { encoding: "utf-8" });
+		const result = execaSync(cmd, [exeName], { encoding: "utf-8" });
 		if (result.status === 0 && result.stdout.trim()) {
 			return result.stdout.trim().split(/\r?\n/)[0];
 		}
@@ -141,8 +141,7 @@ function sendStatus(status, message = "") {
 						message,
 						running:
 							!!(
-								currentProcess &&
-								!currentProcess.killed
+								currentProcess
 							)
 					})}
 				}
@@ -158,32 +157,27 @@ function quoteWinArg(arg) {
 }
 
 function startProcessWithArgs(exe, args) {
-	const isWin = os.platform() === "win32";
-
-	if (isWin) {
-		const commandText = [quoteWinArg(exe), ...args.map(quoteWinArg)].join(" ");
-		currentProcess = spawn("cmd.exe", ["/k", commandText], {
-			windowsHide: false,
-			stdio: ["ignore", "ignore", "ignore"],
-			shell: true,
-			detached: true,
-		});
-	} else {
-		currentProcess = spawn(exe, args, {
-			stdio: "ignore",
-			shell: false,
-			detached: true,
-		});
-	}
-
-	currentProcess.on("close", (code) => {
-		currentProcess = null;
-		sendStatus("idle");
+	const subProcess = execa(exe, args, {
+		windowsHide: false,
+		shell: true,
+		detached: true,
+		stdio: ["ignore", "pipe", "pipe"],
 	});
 
-	currentProcess.on("error", (err) => {
+	// console.log("nat-bridge PID:", subProcess.pid);
+
+	currentProcess = subProcess;
+
+	subProcess.then(() => {
 		currentProcess = null;
-		sendStatus("error");
+		sendStatus("idle", "nat-bridge stopped.");
+	}).catch((error) => {
+		currentProcess = null;
+		if (error.killed || (error.exitCode === 1 && !error.stderr) || error.exitCode === 3221225786) {
+			sendStatus("idle", "nat-bridge stopped.");
+			return;
+		}
+		sendStatus("error", `nat-bridge exited with error: ${error.stderr || error.message || "Unknown error"}`);
 	});
 }
 
@@ -241,7 +235,7 @@ function startFromInteractiveInput(exe, payload) {
 function startLauncher(payload) {
 	const exe = findNatBridgeExecutable();
 	if (!exe) {
-		return { ok: false, message: "nat-bridge executable not found. Place it in project root/launcher or add it to PATH." };
+		return { ok: false, message: "nat-bridge executable not found. Place it in project root/launcher or add it to PATH.", };
 	}
 
 	if (currentProcess && !currentProcess.killed) {
@@ -259,7 +253,7 @@ function killNatBridgeCmdWindows() {
 			"-Command",
 			"Get-CimInstance Win32_Process -Filter \"Name='cmd.exe' AND CommandLine LIKE '%nat-bridge%'\" | Select-Object -ExpandProperty ProcessId",
 		];
-		const ps = spawnSync("powershell.exe", psArgs, {
+		const ps = execaSync("powershell.exe", psArgs, {
 			encoding: "utf8",
 			windowsHide: true,
 		});
@@ -274,7 +268,7 @@ function killNatBridgeCmdWindows() {
 
 		if (pids.length) {
 			const args = ["/F", "/T", ...pids.flatMap((pid) => ["/PID", String(pid)])];
-			spawnSync("taskkill", args, { windowsHide: true, stdio: "ignore" });
+			execaSync("taskkill", args, { windowsHide: true, stdio: "ignore" });
 		}
 	} catch (_) {
 		// Well we tried.
@@ -284,7 +278,6 @@ function killNatBridgeCmdWindows() {
 function getHtml(htmlPath, workspace) {
 	let html = fs.readFileSync(htmlPath, "utf-8");
 
-	// replace style and script paths with inline content
 	html = html.replace(/<(link|script)\s+[^>]*(href|src)="([^"]+)"[^>]*>/g, (match, tag, attr, src) => {
 		const ext = path.extname(src).toLowerCase();
 		const fullPath = path.join(workspace, src);
@@ -306,9 +299,12 @@ function getHtml(htmlPath, workspace) {
 	return html;
 }
 
+let status = "idle";
+
 function createMainWindow() {
 	const webviewData = path.join(os.tmpdir(), "nat-bridge-webview");
 	fs.mkdirSync(webviewData, { recursive: true });
+	const icon = fs.readFileSync(path.join(__dirname, "./icon.ico"));
 
 	process.env.WEBVIEW2_USER_DATA_FOLDER = webviewData;
 	process.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--allow-file-access-from-files --allow-file-access";
@@ -321,7 +317,7 @@ function createMainWindow() {
 		width: 642.5,
 		height: 300,
 	});
-	window.setWindowIcon(path.join(__dirname, "..", "icons", "icon.ico"), 256, 256);
+	window.setWindowIcon(icon);
 	window.setMaximizable(false);
 	window.setResizable(false);
 
@@ -331,6 +327,7 @@ function createMainWindow() {
 	mainWebview = window.createWebview({
 		html: getHtml(uiPath, path.join(__dirname, "ui")),
 	});
+	mainWebview.setBackgroundColor(31, 31, 31, 255);
 
 	// mainWebview.openDevtools(true);
 
@@ -347,8 +344,22 @@ function createMainWindow() {
 		try {
 			if (data.type === "launcherToggle") {
 				const payload = data.payload || {};
-				const result = startLauncher(payload);
-				sendStatus(result.ok ? "running" : "error", result.message);
+				let result = { ok: false, message: "Unknown error." };
+				if (!currentProcess) {
+					result = startLauncher(payload);
+					status = result.ok ? "running" : "error";
+				} else {
+					if (currentProcess) {
+						if (os.platform() === "win32") {
+							killNatBridgeCmdWindows();
+						} else {
+							currentProcess.kill();
+						}
+					}
+					result = { ok: true, message: "nat-bridge stopped."};
+					status = "idle";
+				}
+				sendStatus(status, result.message);
 			} else if (data.type === "browseConfig") {
 				const { dialog } = require("electron");
 				const result = dialog.showOpenDialogSync(mainWindow, {
@@ -374,7 +385,7 @@ function createMainWindow() {
 				}
 			} else if (data.type === "heightChange") {
 				// console.log(`Height change requested: ${data.payload}`);
-				mainWindow.setSize(642.5, data.payload, true);
+				mainWindow.setSize(642.5, Number(data.payload) + 5, true);
 			} else if (data.type === "openFileDialog") {
 				let result = window.openFileDialog({ multiple: false, title: "Select NAT-bridge Configuration File", filters: [{ name: "JSON Files", extensions: ["json"] }] });
 				if (result && result[0]) {
