@@ -1,5 +1,5 @@
-:: @echo off
-:: setlocal
+@echo off
+setlocal
 
 echo Starting build process...
 cd ./launcher
