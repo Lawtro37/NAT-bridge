@@ -53,11 +53,8 @@ function refreshProtocol() {
 }
 
 function setStatus(status, isRunning, message) {
-  running = !!isRunning;
-
-  // console.log(`Status update: ${status} (${message || "No message"}), running: ${running}`);
   el.statusLabel.textContent = `Status: ${status}`;
-  el.runBtn.textContent = running ? "Stop" : "Start";
+  el.runBtn.textContent = isRunning ? "Stop" : "Start";
   el.messageLabel.textContent = message || "";
   el.messageLabel.style.color = status === "error" ? "#ff0000" : "";
 }
@@ -90,7 +87,6 @@ el.mode.addEventListener("change", refreshProtocol);
 
 const resizeObserver = new ResizeObserver((entries) => {
   for (let entry of entries) {
-    // console.log(`Observed size change: ${entry.contentRect.width}x${entry.contentRect.height}`);
     sendIpc("heightChange", document.getElementById("mainWindow").offsetHeight-5);
   }
 });
@@ -117,8 +113,5 @@ el.advancedOptions.open = false;
 setStatus("idle", false);
 
 function sendIpc(type, payload) {
-  // console.log(`Sending IPC: ${JSON.stringify({ type, payload })}`);
   window.ipc.postMessage(JSON.stringify({ type, payload }));
 }
-
-window.ipc.postMessage('Hello from webview');
