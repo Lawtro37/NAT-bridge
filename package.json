@@ -9,8 +9,8 @@
   "main": "main.js",
   "scripts": {
     "launcher": "node ./launcher/nat-bridge-launcher.js",
-    "build": "build.bat",
-    "build:launcher": "build-launcher.bat"
+    "build": "cd scripts && build.bat",
+    "build:launcher": "cd scripts && build-launcher.bat"
   },
   "dependencies": {
     "blessed": "^0.1.81",
