@@ -2,7 +2,7 @@
 setlocal
 
 echo Starting build process...
-cd ./launcher
+cd ../launcher
 
 echo Cleaning previous build artifacts...
 del package-lock.json
