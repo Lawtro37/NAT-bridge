@@ -3,6 +3,8 @@ setlocal
 
 echo Starting build process...
 
+cd ../
+
 if exist dist\nat-bridge.exe del dist\nat-bridge.exe
 
 echo Cleaning previous build artifacts...
