@@ -18,7 +18,7 @@
   <p align="center">
     Network through P2P with no port fowarding
     <br />
-    <a href="https://github.com/Lawtro37/NAT-bridge/releases/tag/v1.2.2"><strong>Latest Release »</strong></a>
+    <a href="https://github.com/Lawtro37/NAT-bridge/releases/tag/v1.2.3"><strong>Latest Release »</strong></a>
     <br />
     <br />
     <a href="https://github.com/Lawtro37/NAT-bridge/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
@@ -34,7 +34,7 @@
   <summary>Table of Contents</summary>
   <ol>
     <li>
-      <a href="#about-">About</a>
+      <a href="#about">About</a>
       <ul>
         <li><a href="#built-with">Built With</a></li>
       </ul>
@@ -50,6 +50,7 @@
     <li><a href="#usage">Usage</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#contributing">Contributing</a></li>
+    <li><a herf="#support-the-project">Support The Project</a></li>
     <li><a href="#license">License</a></li>
   </ol>
 </details>
@@ -88,7 +89,7 @@ Hyperswarm is made with node.js and can be run as such. However, if you prefer, 
 
 ### Prerequisites
 For this you will need the following:
-* node
+* node v24.0.0 or above
   ```bash
   winget install OpenJS.NodeJS
   ```
@@ -120,7 +121,7 @@ Follow these steps to run NAT-bridge
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### Building to Executable
-Follow these steps if you wish to build NAT-Bidge to an executable
+Follow these steps if you wish to build NAT-Bidge to an executable and ensure you have all dev dependencies installed.
 
 #### Standalone EXE
 ```bash
@@ -133,7 +134,7 @@ npm run build:launcher
 ```
 Note that the launcher must be in the same or child directory as a `nat-bridge.exe` executable
 
-There are currently no built in scripts for building to an executable for any operating system other than windows, though it can be done manualy through `pkg`.
+There are currently no built in scripts for building to an executable for any operating system other than windows, though it can be done manualy through `caxa` or `pkg` if you can get it to work.
 
 <!-- USAGE EXAMPLES -->
 ## Usage
@@ -237,6 +238,7 @@ nat-bridge config ./config.json
 ## Roadmap
 
 - [x] Add a GUI Launcher
+    - [X] Use the systems default webview instead of elecron
 - [x] Add a terminal UI
 - [ ] Refactor so everything isnt in one file
 - [ ] Add more visuals to the TUI
@@ -264,10 +266,24 @@ Feel free to fork, file issues, and submit pull requests! Any contributions that
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+<!--STARS -->
+## Support The Project!
+by leaving a star
+
+<a href="https://www.star-history.com/?repos=Lawtro37%2FNAT-bridge&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Lawtro37/NAT-bridge&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Lawtro37/NAT-bridge&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Lawtro37/NAT-bridge&type=date&legend=bottom-right" />
+ </picture>
+</a>
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 <!-- LICENSE -->
 ## License
 
-Distributed under the **GPL-3.0** License. See the `LICENSE` file for more information.
+Distributed under the **GPL-3.0** License. See the [`LICENSE`](https://github.com/Lawtro37/NAT-bridge/blob/main/LICENSE) file for more information.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
