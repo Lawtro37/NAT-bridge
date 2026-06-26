@@ -15,6 +15,7 @@
   "dependencies": {
     "blessed": "^0.1.81",
     "hyperswarm": "^4.11.7",
+    "prompt-sync": "^4.2.0",
     "multiplex": "^6.7.0",
     "pump": "^3.0.3"
   },
