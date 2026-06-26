@@ -30,8 +30,11 @@ body {
   color: var(--fg);
 }
 
+html {
+  overflow: hidden;
+}
+
 .window {
-  height: 100%;
   box-sizing: border-box;
   padding: 12px;
   display: flex;
@@ -79,14 +82,16 @@ input,
 select,
 button,
 textarea,
-fieldset {
+fieldset,
+.browse-btn {
   font-family: inherit;
   font-size: 13px;
 }
 
 input,
 select,
-button {
+button,
+.browse-btn {
   height: 28px;
   border: 1px solid var(--control-border);
   border-radius: 2px;
@@ -102,6 +107,25 @@ select {
 button {
   padding: 0 10px;
   cursor: pointer;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.browse-btn {
+  display: inline-block;
+  padding: 8px 12px 0px 12px;
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 2px;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.browse-path {
+  flex: 1;
+  width: auto;
 }
 
 #configFile {

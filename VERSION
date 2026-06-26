@@ -1,3 +1,9 @@
+1.2.3
+- Updated the launcher to use the systems native webview instead of electron
+- Updated the build process to use caxa instead of pkg
+- Fixed and revamped config system
+- Minor bug fixes and improvements
+----------
 1.2.2
 - Updated Launcher UI to use a dropdown for advanced options
 ----------

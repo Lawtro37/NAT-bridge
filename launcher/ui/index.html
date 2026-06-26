@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="window">
+  <div class="window" id="mainWindow">
     <div class="title">NAT-bridge Launcher</div>
 
     <div class="row">
@@ -16,8 +16,9 @@
 
     <div class="row" id="configRow">
       <label class="field-label" for="configFile">Config file</label>
-      <input id="configFile" type="text" />
-      <button id="browseBtn" type="button">Browse...</button>
+      <button id="browseBtn">Upload File</button>
+
+      <input id="configFile" type="text" class="browse-path" placeholder="Config file path" />
     </div>
 
     <div id="interactiveSection">
@@ -74,6 +75,7 @@
     <div class="row actions">
       <button id="runBtn" type="button">Start</button>
       <span id="statusLabel">Status: idle</span>
+      <span id="messageLabel"></span>
     </div>
   </div>
 

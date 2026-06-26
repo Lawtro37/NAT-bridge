@@ -1,5 +1,13 @@
 {
   "name": "nat-bridge-launcher",
-  "version": "1.0.0",
-  "main": "nat-bridge-launcher.js"
+  "version": "1.2.3",
+  "description": "Nat-bridge launcher. Provides a GUI for managing nat-bridge.",
+  "author": "Lawtro37",
+  "license": "GPL-3.0-only",
+  "homepage": "https://github.com/Lawtro37/nat-bridge",
+  "repository": "github:Lawtro37/nat-bridge",
+  "main": "nat-bridge-launcher.js",
+  "dependencies": {
+    "execa": "^9.6.1"
+  }
 }

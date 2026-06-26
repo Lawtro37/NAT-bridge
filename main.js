@@ -1,6 +1,18 @@
 #!/usr/bin/env node
 'use strict';
 
+// Patch for pkg virtual file system module resolution error
+if (process.pkg) {
+  const Module = require('module');
+  const originalRequire = Module.prototype.require;
+  Module.prototype.require = function (id) {
+    if (id === 'events-universal') {
+      return originalRequire.call(this, 'events-universal/default.js');
+    }
+    return originalRequire.call(this, id);
+  };
+}
+
 const net = require('net');
 const dgram = require('dgram');
 const Hyperswarm = require('hyperswarm');
@@ -10,8 +22,9 @@ const https = require('https');
 const http = require('http');
 const pump = require('pump');
 const { Transform } = require('stream');
+const prompt = require('prompt-sync')();
 
-const VERSION = '1.2.2';
+const VERSION = '1.2.3';
 const VERSION_CHECK_URL = 'https://raw.githubusercontent.com/Lawtro37/NAT-bridge/refs/heads/main/VERSION';
 
 // ------------------------- CLI / Helpers -------------------------
@@ -86,87 +99,14 @@ Examples:
   process.exit(1);
 }
 
-// Validate / config mode
-if (!['host', 'client', 'config'].includes(mode) || !bridgeId || !['tcp', 'udp', 'both'].includes(protocol)) {
-  if (!(mode === 'config')) printHelpAndExit();
-}
-
-if (mode === 'config') {
-  info(`Loading configuration from file "${bridgeId}"`);
-  try {
-    const config = require(bridgeId);
-    if (['host', 'client'].includes(config.mode) && ['tcp', 'udp', 'both'].includes(config.protocol)) {
-      mode = config.mode;
-      bridgeId = config.bridgeId || Math.random().toString(36).substring(2, 15);
-      listenPort = config.listenPort || listenPort || 5000;
-      remotePort = config.exposedPort || remotePort || 8080;
-      protocol = config.protocol;
-      VERBOSE = config.verbose || VERBOSE;
-      SECRET = config.secret || SECRET;
-      STATUS_PORT = config.status || STATUS_PORT;
-      MAX_STREAMS = config.maxStreams || MAX_STREAMS;
-      KBPS = config.kbps || KBPS;
-      TCP_CONNECT_RETRIES = config.tcpRetries || TCP_CONNECT_RETRIES;
-      TCP_RETRY_DELAY_MS = config.tcpRetryDelayMs || TCP_RETRY_DELAY_MS;
-    } else {
-      error("Invalid configuration file. Please check the contents.");
-      process.exit(1);
-    }
-  } catch (e) {
-    error(`Failed to load configuration file "${bridgeId}": ${e.message}`);
-    process.exit(1);
-  }
-}
-
-if (mode === 'client' && protocol === 'both') {
-  error("Client mode does not support 'both' protocol. Please use 'tcp' or 'udp'.");
-  info("You can open a udp and tcp tunnel on the same port to achieve the same effect.");
-  process.exit(1);
-}
-
 // Logging
-function nowIso() { return new Date().toISOString(); }
-function color(text, c) {
-  if (JSON_MODE || !process.stdout.isTTY || NO_FANCY_LOGS) return text;
-  return `\x1b[${c}m${text}\x1b[0m`;
-}
-function formatBytes(n) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}
-
-// ------------------------- TUI -------------------------
-
-let tui = null;
-let tuiScreen = null;
-let tuiHeader = null;
-let tuiStatus = null;
-let tuiMetrics = null;
-let tuiLog = null;
-let tuiFooter = null;
-let tuiLogPaused = false;
-let tuiLogBuffer = [];
-let tuiPendingLogBuffer = [];
-let tuiTick = null;
-let tuiSpinnerMessage = '';
-let tuiSpinnerIndex = 0;
-let tuiStatusLine = '';
-const tuiSpinnerChars = ['|', '/', '-', '\\'];
 const crashLogBuffer = [];
 const crashLogLimit = 400;
-let lastRateTs = Date.now();
-let lastRateUp = 0;
-let lastRateDown = 0;
-let rateUpBps = 0;
-let rateDownBps = 0;
-
-function pushCrashLog(level, msg) {
-  const line = `[${String(level).toUpperCase()}] ${String(msg ?? '')}`;
-  crashLogBuffer.push(line);
-  if (crashLogBuffer.length > crashLogLimit) crashLogBuffer.shift();
-}
+let tuiLog = null;
+let tuiPendingLogBuffer = [];
+let tuiLogPaused = false;
+let tuiLogBuffer = [];
+let tuiScreen = null;
 
 function formatTuiLog(level, msg) {
   const lvl = String(level || '').toLowerCase();
@@ -186,7 +126,7 @@ function formatTuiLog(level, msg) {
 }
 
 function emitTui(level, msg) {
-  if (!TUI_ENABLED) return false;
+  if (!TUI_ENABLED || !tuiScreen) return false;
   const line = formatTuiLog(level, msg);
   if (!tuiLog) {
     tuiPendingLogBuffer.push(line);
@@ -201,6 +141,140 @@ function emitTui(level, msg) {
   tuiLog.log(line);
   return true;
 }
+
+function pushCrashLog(level, msg) {
+  const line = `[${String(level).toUpperCase()}] ${String(msg ?? '')}`;
+  crashLogBuffer.push(line);
+  if (crashLogBuffer.length > crashLogLimit) crashLogBuffer.shift();
+}
+
+function nowIso() { return new Date().toISOString(); }
+function color(text, c) {
+  if (JSON_MODE || !process.stdout.isTTY || NO_FANCY_LOGS) return text;
+  return `\x1b[${c}m${text}\x1b[0m`;
+}
+function formatBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+function jlog(level, msg, extra = {}) {
+  if (!JSON_MODE) return false;
+  const entry = { ts: nowIso(), level, msg, ...extra };
+  console.log(JSON.stringify(entry));
+  return true;
+}
+const info = (msg, extra) => jlog('info', msg, extra) || (pushCrashLog('info', msg), emitTui('info', msg) || console.log(color('[INFO]', '36'), msg));
+const warn = (msg, extra) => {
+  const s = String(msg ?? '');
+  if (!isExpectedDisconnect(s)) (jlog('warn', s, extra) || (pushCrashLog('warn', s), emitTui('warn', s) || console.warn(color('[WARN]', '33'), s)));
+};
+const error = (msg, extra) => jlog('error', String(msg ?? ''), extra) || (pushCrashLog('error', msg), emitTui('error', msg) || console.error(color('[ERROR]', '31'), msg));
+const success = (msg, extra) => jlog('success', msg, extra) || (pushCrashLog('success', msg), emitTui('success', msg) || console.log(color('[SUCCESS]', '32'), msg));
+const verboseLog = (msg, extra) => { if (VERBOSE) (jlog('verbose', msg, extra) || (pushCrashLog('verbose', msg), emitTui('verbose', msg) || console.log(color('[VERBOSE]', '90'), msg))); };
+const update = (msg, extra) => jlog('update', msg, extra) || (pushCrashLog('update', msg), emitTui('update', msg) || console.log(color('[UPDATE]', '33'), msg));
+const criticalVersionWarning = (msg, extra) => jlog('critical update', msg, extra) || (pushCrashLog('critical update', msg), emitTui('critical update', msg) || console.error(color('[CRITICAL UPDATE]', '31'), msg));
+
+// Validate / config mode
+if (!['host', 'client', 'config'].includes(mode) || !bridgeId || !['tcp', 'udp', 'both'].includes(protocol)) {
+  if (!(mode === 'config')) printHelpAndExit();
+}
+
+if (mode === 'config') {
+  const configPath = bridgeId;
+  try {
+    info(`Loading configuration from file "${configPath}"`);
+    const config = require(configPath);
+
+    if (!config || typeof config !== 'object') {
+      error(`Invalid configuration file "${configPath}". Expected an object.`);
+      process.exit(1);
+    }
+
+    if (config.mode && !['host', 'client'].includes(config.mode)) {
+      error(`Invalid configuration key "mode" in file "${configPath}". Expected "host" or "client".`);
+      process.exit(1);
+    }
+
+    if (config.protocol && !['tcp', 'udp', 'both'].includes(config.protocol)) {
+      error(`Invalid configuration key "protocol" in file "${configPath}". Expected "tcp", "udp", or "both".`);
+      process.exit(1);
+    }
+
+    if (config.expectedWarnings && !Array.isArray(config.expectedWarnings)) {
+      error(`Invalid configuration key "expectedWarnings" in file "${configPath}". Expected an array.`);
+      process.exit(1);
+    }
+
+    if (config.bridgeId && typeof config.bridgeId !== 'string') {
+      error(`Invalid configuration key "bridgeId" in file "${configPath}". Expected a string.`);
+      process.exit(1);
+    } 
+    if (!Object.keys(config).includes('bridgeId') || !config.bridgeId) {
+      config.bridgeId = prompt('please enter a bridge ID: ');
+    } else if (config.bridgeId == "auto") {
+      config.bridgeId = Math.random().toString(36).substring(2, 15);
+    }
+
+    for (const key of Object.keys(config)) {
+      const val = config[key];
+      if (val == undefined || val === null) {
+        // prompt user to enter value for missing config key
+        config[key] = prompt(`please enter a value for "${key}": `);
+      }
+    }
+
+    if (['host', 'client'].includes(config.mode) && ['tcp', 'udp', 'both'].includes(config.protocol)) {
+      mode = config.mode;
+      bridgeId = config.bridgeId || Math.random().toString(36).substring(2, 15);
+      listenPort = config.listenPort || listenPort || 5000;
+      remotePort = config.exposedPort || remotePort || 8080;
+      protocol = config.protocol;
+      VERBOSE = config.verbose || VERBOSE;
+      EXPECTEDWARNINGS = config.expectedWarnings || EXPECTEDWARNINGS;
+      JSON_MODE = config.json || JSON_MODE;
+      SECRET = config.secret || SECRET;
+      STATUS_PORT = config.status || STATUS_PORT;
+      MAX_STREAMS = config.maxStreams || MAX_STREAMS;
+      KBPS = config.kbps || KBPS;
+      TCP_CONNECT_RETRIES = config.tcpRetries || TCP_CONNECT_RETRIES;
+      TCP_RETRY_DELAY_MS = config.tcpRetryDelayMs || TCP_RETRY_DELAY_MS;
+      NO_TUI = config.noTui || NO_TUI;
+      NO_FANCY_LOGS = config.noFancyLogs || NO_FANCY_LOGS;
+    } else {
+      error("Invalid configuration file. Please check the contents.");
+      process.exit(1);
+    }
+  } catch (e) {
+    error(`Failed to load configuration file "${configPath}": ${e.message}`);
+    process.exit(1);
+  }
+}
+
+if (mode === 'client' && protocol === 'both') {
+  error("Client mode does not support 'both' protocol. Please use 'tcp' or 'udp'.");
+  info("You can open a udp and tcp tunnel on the same port to achieve the same effect.");
+  process.exit(1);
+}
+
+// ------------------------- TUI -------------------------
+
+let tui = null;
+let tuiHeader = null;
+let tuiStatus = null;
+let tuiMetrics = null;
+let tuiFooter = null;
+let tuiTick = null;
+let tuiSpinnerMessage = '';
+let tuiSpinnerIndex = 0;
+let tuiStatusLine = '';
+const tuiSpinnerChars = ['|', '/', '-', '\\'];
+let lastRateTs = Date.now();
+let lastRateUp = 0;
+let lastRateDown = 0;
+let rateUpBps = 0;
+let rateDownBps = 0;
 
 function initTui() {
   if (!TUI_ENABLED) return;
@@ -359,22 +433,6 @@ function initTui() {
     tuiScreen.render();
   }, 500);
 }
-function jlog(level, msg, extra = {}) {
-  if (!JSON_MODE) return false;
-  const entry = { ts: nowIso(), level, msg, ...extra };
-  console.log(JSON.stringify(entry));
-  return true;
-}
-const info = (msg, extra) => jlog('info', msg, extra) || (pushCrashLog('info', msg), emitTui('info', msg) || console.log(color('[INFO]', '36'), msg));
-const warn = (msg, extra) => {
-  const s = String(msg ?? '');
-  if (!isExpectedDisconnect(s)) (jlog('warn', s, extra) || (pushCrashLog('warn', s), emitTui('warn', s) || console.warn(color('[WARN]', '33'), s)));
-};
-const error = (msg, extra) => jlog('error', String(msg ?? ''), extra) || (pushCrashLog('error', msg), emitTui('error', msg) || console.error(color('[ERROR]', '31'), msg));
-const success = (msg, extra) => jlog('success', msg, extra) || (pushCrashLog('success', msg), emitTui('success', msg) || console.log(color('[SUCCESS]', '32'), msg));
-const verboseLog = (msg, extra) => { if (VERBOSE) (jlog('verbose', msg, extra) || (pushCrashLog('verbose', msg), emitTui('verbose', msg) || console.log(color('[VERBOSE]', '90'), msg))); };
-const update = (msg, extra) => jlog('update', msg, extra) || (pushCrashLog('update', msg), emitTui('update', msg) || console.log(color('[UPDATE]', '33'), msg));
-const criticalVersionWarning = (msg, extra) => jlog('critical update', msg, extra) || (pushCrashLog('critical update', msg), emitTui('critical update', msg) || console.error(color('[CRITICAL UPDATE]', '31'), msg));
 
 // Spinner
 let spinnerInterval = null;
@@ -601,7 +659,7 @@ if (!SKIP_UPDATE_CHECK) {
           stopExecutionForCriticalUpdate();
           return;
         } else {
-          gracefulExit(0);
+          gracefulExit(0, 'Critical update available');
         }
       }
 
@@ -1133,7 +1191,7 @@ swarm.join(topic, { lookup: mode === 'client', announce: mode === 'host' });
 
 swarm.on('error', (err) => {
   error(`Swarm error: ${err.message}`);
-  gracefulExit(1);
+  gracefulExit(1, err.message);
 });
 
 function handleSwarmClose() {
@@ -1152,11 +1210,13 @@ swarm.on('close', handleSwarmClose);
 let exiting = false;
 
 function printCrashLog() {
-  if (crashLogBuffer.length) {
-    console.error('\n--- NAT-bridge crash log ---');
-    crashLogBuffer.forEach(line => console.error(line));
-    console.error('--- end crash log ---\n');
-  }
+  try {
+    if (crashLogBuffer.length) {
+      console.error('\n--- NAT-bridge crash log ---');
+      crashLogBuffer.forEach(line => console.error(line));
+      console.error('--- end crash log ---\n');
+    }
+  } catch (e) { console.error('Failed to print crash log:', e); }
 }
 
 function stopExecutionForCriticalUpdate() {
@@ -1202,7 +1262,7 @@ function stopExecutionForCriticalUpdate() {
   }
 }
 
-function gracefulExit(code = 0) {
+function gracefulExit(code = 0, error) {
   if (exiting) return;
   stopSpinner();
   info('Shutting down gracefully... (press Ctrl+C again to force exit)');
@@ -1256,7 +1316,11 @@ function gracefulExit(code = 0) {
       stopSpinner();
       info('Swarm closed');
       stopExitSpinner();
-      if (code !== 0 && TUI_ENABLED) printCrashLog();
+      if (code !== 0 && TUI_ENABLED) {
+        printCrashLog();
+        // set stderr
+        console.error(error ? color(`Error: ${error}`, '31') : 'Exited with error');
+      }
       process.exit(code);
     });
 
@@ -1265,7 +1329,11 @@ function gracefulExit(code = 0) {
       if (!swarmClosed) {
         stopSpinner();
         stopExitSpinner();
-        if (code !== 0 && TUI_ENABLED) printCrashLog();
+        if (code !== 0 && TUI_ENABLED) {
+          printCrashLog();
+          // set stderr
+          console.error((error ? color(`Error: ${error}`, '31') : 'Exited with error') + ' (swarm close timeout)');
+        }
         warn('Swarm close timeout reached, forcing exit...');
         process.exit(code);
       }
@@ -1282,6 +1350,6 @@ process.on('uncaughtException', (err) => {
   error(`Uncaught exception: ${err.message}`);
   if (VERBOSE) console.error(err.stack || err);
   enableExitKeypress();
-  gracefulExit(1);
+  gracefulExit(1, err.message);
 });
 process.on('exit', (code) => { if (!exiting) enableExitKeypress(); gracefulExit(code); });
