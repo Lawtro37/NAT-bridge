@@ -50,7 +50,7 @@
     <li><a href="#usage">Usage</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#contributing">Contributing</a></li>
-    <li><a herf="#support-the-project">Support The Project</a></li>
+    <li><a href="#support-the-project">Support The Project</a></li>
     <li><a href="#license">License</a></li>
   </ol>
 </details>
