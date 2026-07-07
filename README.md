@@ -272,9 +272,9 @@ by leaving a star
 
 <a href="https://www.star-history.com/?repos=Lawtro37%2FNAT-bridge&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Lawtro37/NAT-bridge&type=date&theme=dark&legend=bottom-right" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Lawtro37/NAT-bridge&type=date&legend=bottom-right" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Lawtro37/NAT-bridge&type=date&legend=bottom-right" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Lawtro37/NAT-bridge&type=date&theme=dark&legend=top-left&sealed_token=qsBKh3kiyA0ijTai7eeGSuzwJmT0CZdZCzwILsaikwuhoi4oG-dA4Y06wXACvRnmMG9wVepuKpESfmJlMYxQgJZ5BfSijl_77BXxQdoMrRYNL7yFrqco9Q" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Lawtro37/NAT-bridge&type=date&legend=top-left&sealed_token=qsBKh3kiyA0ijTai7eeGSuzwJmT0CZdZCzwILsaikwuhoi4oG-dA4Y06wXACvRnmMG9wVepuKpESfmJlMYxQgJZ5BfSijl_77BXxQdoMrRYNL7yFrqco9Q" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Lawtro37/NAT-bridge&type=date&legend=top-left&sealed_token=qsBKh3kiyA0ijTai7eeGSuzwJmT0CZdZCzwILsaikwuhoi4oG-dA4Y06wXACvRnmMG9wVepuKpESfmJlMYxQgJZ5BfSijl_77BXxQdoMrRYNL7yFrqco9Q" />
  </picture>
 </a>
 
