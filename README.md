@@ -27,7 +27,9 @@
   </p>
 </div>
 
-
+# READ THIS FOR IMPORTANYT INFO ABOUT THIS BRANCH:
+**This is the rust development branch where development of a new rust version will take place**
+**Eventualy this branch will replace the main and dev branches once all features are re-implemented**
 
 <!-- TABLE OF CONTENTS -->
 <details>
