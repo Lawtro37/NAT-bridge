@@ -1,6 +1,0 @@
-{
-    "comment": "configuration example for connecting to a Minecraft server running on the host machine",
-    "mode": "client",
-    "listenPort": 25565,
-    "protocol": "tcp"
-}
